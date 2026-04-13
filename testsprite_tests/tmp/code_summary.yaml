@@ -1,0 +1,114 @@
+version: "2"
+type: backend
+tech_stack:
+  - Node.js
+  - Express.js
+  - PostgreSQL
+  - Razorpay
+  - Twilio
+features:
+  - name: Authentication API
+    description: Login verification using PIN for Admin and Bouncer
+    files:
+      - routes/auth.js
+    endpoints:
+      - method: POST
+        path: /api/auth/verify
+        description: Verify PIN and get role token
+        auth_required: false
+      - method: GET
+        path: /api/auth/config
+        description: Get public configurations
+        auth_required: false
+  - name: Guest List API
+    description: CRUD operations for Pre-approved Guest List
+    files:
+      - routes/guestlist.js
+    endpoints:
+      - method: GET
+        path: /api/guestlist
+        description: Get all guest list entries
+        auth_required: true
+      - method: POST
+        path: /api/guestlist
+        description: Add an entry to the guest list
+        auth_required: true
+      - method: DELETE
+        path: /api/guestlist/:id
+        description: Remove an entry from guest list
+        auth_required: true
+      - method: POST
+        path: /api/guestlist/:id/arrive
+        description: Mark entry as arrived
+        auth_required: true
+      - method: POST
+        path: /api/guestlist/verify
+        description: Verify name and wa match at check-in
+        auth_required: false
+      - method: GET
+        path: /api/guestlist/export
+        description: Export guest list to CSV
+        auth_required: false
+  - name: Guests API
+    description: Operations for checkins and verifications
+    files:
+      - routes/guests.js
+    endpoints:
+      - method: POST
+        path: /api/guests/checkin
+        description: Check-in a guest
+        auth_required: false
+      - method: GET
+        path: /api/guests/stats
+        description: Get dashboard statistics
+        auth_required: true
+      - method: GET
+        path: /api/guests
+        description: Get all guest records
+        auth_required: true
+      - method: GET
+        path: /api/guests/export
+        description: Export guests to CSV
+        auth_required: false
+      - method: DELETE
+        path: /api/guests/clear
+        description: Clear all tonight's check-in data
+        auth_required: true
+      - method: GET
+        path: /api/guests/verify/:token
+        description: Verify a guest token
+        auth_required: true
+      - method: POST
+        path: /api/guests/scan/:token
+        description: Scan a guest token
+        auth_required: true
+      - method: POST
+        path: /api/guests/resend/:token
+        description: Resend WhatsApp pass
+        auth_required: false
+      - method: POST
+        path: /api/guests/:token/force-entry
+        description: Admin forcefully letting guest entry
+        auth_required: true
+      - method: POST
+        path: /api/guests/:token/kick-out
+        description: Admin kicking guest out
+        auth_required: true
+  - name: Payments API
+    description: Payment verification and webhook
+    files:
+      - routes/payments.js
+    endpoints:
+      - method: POST
+        path: /api/payments/create-order
+        description: Create Razorpay order
+        auth_required: false
+      - method: POST
+        path: /api/payments/verify
+        description: Verify payment signature
+        auth_required: false
+      - method: POST
+        path: /api/payments/webhook
+        description: Razorpay Webhook
+        auth_required: false
+known_limitations: []

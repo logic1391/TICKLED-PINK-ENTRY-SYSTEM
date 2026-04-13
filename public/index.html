@@ -1,0 +1,2356 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TICKLED PINK — Entry System</title>
+  <meta name="description"
+    content="VoidClub secure entry system — check-in, QR pass, bouncer scanner, admin dashboard." />
+  <!-- QR generation -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <!-- FIX 1: jsQR for iOS/Safari/Firefox fallback -->
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <!-- Razorpay Checkout -->
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+    :root {
+      --accent: #FF66B2;
+      --accent2: #FFD700;
+      --dark: #080810;
+      --surface: rgba(255,255,255,0.05);
+      --surface2: rgba(255,255,255,0.08);
+      --border: rgba(255,255,255,0.1);
+      --border2: rgba(255,255,255,0.06);
+      --text: #F5F5F7;
+      --muted: rgba(255,255,255,0.4);
+      --green: #30D158;
+      --red: #FF66B2;
+      --yellow: #FFD60A;
+      --glass: rgba(255,255,255,0.06);
+      --glass-hover: rgba(255,255,255,0.1);
+      --glass-stroke: rgba(255,255,255,0.12);
+      --shadow: 0 8px 32px rgba(0,0,0,0.6);
+      --shadow-lg: 0 20px 60px rgba(0,0,0,0.7);
+    }
+
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--dark);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Ambient background orbs ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 60% 50% at 15% 10%, rgba(255, 102, 178, 0.18) 0%, transparent 70%),
+        radial-gradient(ellipse 50% 60% at 85% 80%, rgba(255, 215, 10, 0.12) 0%, transparent 70%),
+        radial-gradient(ellipse 40% 40% at 60% 30%, rgba(120, 60, 255, 0.1) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(8, 8, 16, 0.7);
+      backdrop-filter: blur(28px) saturate(180%);
+      -webkit-backdrop-filter: blur(28px) saturate(180%);
+      border-bottom: 1px solid var(--glass-stroke);
+      box-shadow: 0 1px 0 rgba(255,255,255,0.05), 0 4px 24px rgba(0,0,0,0.4);
+      display: flex;
+      align-items: center;
+      padding: 0 1rem;
+      height: 56px;
+    }
+
+    .nav-logo {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 1.5rem;
+      letter-spacing: 0.1em;
+      color: var(--accent);
+      margin-right: auto
+    }
+
+    .nav-tabs {
+      display: flex
+    }
+
+    .tab-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--muted);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      padding: 0 0.65rem;
+      height: 56px;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+      white-space: nowrap
+    }
+
+    .tab-btn:hover {
+      color: var(--text)
+    }
+
+    .tab-btn.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent)
+    }
+
+    .page {
+      display: none;
+      padding: 2rem 1rem;
+      max-width: 520px;
+      margin: 0 auto;
+      position: relative;
+      z-index: 1;
+    }
+
+    @keyframes pageIn {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .page.active {
+      display: block;
+      animation: pageIn 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+    }
+
+    .page.wide {
+      max-width: 980px
+    }
+
+    .sh {
+      margin-bottom: 2rem
+    }
+
+    .sh h1 {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 2.6rem;
+      letter-spacing: 0.05em;
+      line-height: 1
+    }
+
+    .sh p {
+      color: var(--muted);
+      font-size: 0.88rem;
+      margin-top: 0.4rem
+    }
+
+    .card {
+      background: var(--glass);
+      backdrop-filter: blur(24px) saturate(160%);
+      -webkit-backdrop-filter: blur(24px) saturate(160%);
+      border: 1px solid var(--glass-stroke);
+      border-radius: 18px;
+      box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,0.08);
+      padding: 1.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .prg {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 2rem
+    }
+
+    .ps {
+      flex: 1;
+      height: 3px;
+      background: var(--border);
+      border-radius: 99px;
+      transition: background 0.3s
+    }
+
+    .ps.done {
+      background: var(--accent)
+    }
+
+    .ps.active {
+      background: var(--accent2)
+    }
+
+    .field {
+      margin-bottom: 1.1rem
+    }
+
+    label {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 0.4rem
+    }
+
+    input,
+    select {
+      width: 100%;
+      background: rgba(255,255,255,0.07);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px;
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.95rem;
+      padding: 0.75rem 1rem;
+      outline: none;
+      transition: all 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    }
+
+    input:focus,
+    select:focus {
+      border-color: rgba(255, 102, 178, 0.6);
+      background: rgba(255,255,255,0.1);
+      box-shadow: 0 0 0 3px rgba(255,102,178,0.15), inset 0 1px 0 rgba(255,255,255,0.1);
+    }
+
+    input::placeholder {
+      color: var(--muted);
+    }
+
+    select option {
+      background: #111118;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 0.9rem;
+      background: linear-gradient(145deg, #FF66B2, #e0458f);
+      box-shadow: 0 4px 16px rgba(255,102,178,0.35), inset 0 1px 0 rgba(255,255,255,0.25);
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.95rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      transition: all 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      margin-top: 0.5rem;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(255,102,178,0.5), inset 0 1px 0 rgba(255,255,255,0.3);
+    }
+
+    .btn:active {
+      transform: translateY(0) scale(0.99);
+      box-shadow: 0 2px 8px rgba(255,102,178,0.3);
+    }
+
+    .btn.sec {
+      background: rgba(255,255,255,0.07);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.12);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+      color: var(--text);
+    }
+    .btn.sec:hover {
+      background: rgba(255,255,255,0.12);
+      box-shadow: 0 6px 20px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.12);
+      transform: translateY(-2px);
+    }
+
+    .btn.out {
+      background: rgba(255,102,178,0.08);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,102,178,0.35);
+      box-shadow: inset 0 1px 0 rgba(255,102,178,0.12);
+      color: var(--accent);
+    }
+    .btn.out:hover {
+      background: rgba(255,102,178,0.18);
+      border-color: rgba(255,102,178,0.55);
+      box-shadow: 0 8px 24px rgba(255,102,178,0.45), inset 0 1px 0 rgba(255,102,178,0.2);
+      transform: translateY(-2px);
+    }
+
+    .btn.sm {
+      padding: 0.5rem 0.9rem;
+      font-size: 0.8rem;
+      width: auto;
+      margin-top: 0;
+      border-radius: 9px;
+    }
+
+    .btn.gbtn {
+      background: linear-gradient(145deg, #30D158, #25a845);
+      box-shadow: 0 4px 14px rgba(48,209,88,0.3), inset 0 1px 0 rgba(255,255,255,0.2);
+      color: #000;
+    }
+
+    .btn.dbtn {
+      background: rgba(255,102,178,0.07);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,102,178,0.28);
+      box-shadow: inset 0 1px 0 rgba(255,102,178,0.08);
+      color: var(--red);
+    }
+    .btn.dbtn:hover {
+      background: rgba(255,102,178,0.15);
+      border-color: rgba(255,102,178,0.5);
+      box-shadow: 0 8px 24px rgba(255,102,178,0.35), inset 0 1px 0 rgba(255,102,178,0.15);
+      transform: translateY(-2px);
+    }
+
+    .btn.ybtn {
+      background: rgba(255,214,10,0.07);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,214,10,0.28);
+      box-shadow: inset 0 1px 0 rgba(255,214,10,0.08);
+      color: var(--yellow);
+    }
+    .btn.ybtn:hover {
+      background: rgba(255,214,10,0.15);
+      border-color: rgba(255,214,10,0.5);
+      box-shadow: 0 8px 24px rgba(255,214,10,0.35), inset 0 1px 0 rgba(255,214,10,0.15);
+      transform: translateY(-2px);
+    }
+
+    .btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      transform: none !important
+    }
+
+    .btn.loading {
+      opacity: 0.7;
+      cursor: not-allowed
+    }
+
+    .alert {
+      border-radius: 12px;
+      padding: 0.9rem 1rem;
+      font-size: 0.88rem;
+      font-weight: 500;
+      margin-bottom: 1rem;
+      display: none;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+
+    .alert.show {
+      display: block;
+    }
+
+    .alert.err {
+      background: rgba(255, 69, 100, 0.12);
+      border: 1px solid rgba(255, 102, 178, 0.25);
+      color: var(--red);
+    }
+
+    .alert.ok {
+      background: rgba(48, 209, 88, 0.1);
+      border: 1px solid rgba(48, 209, 88, 0.25);
+      color: var(--green);
+    }
+
+    .alert.wrn {
+      background: rgba(255, 214, 10, 0.1);
+      border: 1px solid rgba(255, 214, 10, 0.25);
+      color: var(--yellow);
+    }
+
+    .tgrid {
+      display: grid;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+
+    .topt {
+      background: var(--glass);
+      backdrop-filter: blur(20px) saturate(160%);
+      -webkit-backdrop-filter: blur(20px) saturate(160%);
+      border: 1px solid var(--glass-stroke);
+      box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,0.06);
+      border-radius: 14px;
+      padding: 1rem;
+      cursor: pointer;
+      transition: all 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .topt:hover {
+      background: var(--glass-hover);
+      border-color: rgba(255,255,255,0.18);
+      transform: translateY(-1px);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1);
+    }
+
+    .topt.sel {
+      border-color: rgba(255,102,178,0.5);
+      background: rgba(255,102,178,0.1);
+      box-shadow: 0 8px 32px rgba(255,102,178,0.15), inset 0 1px 0 rgba(255,102,178,0.15);
+    }
+
+    .topt .tn {
+      font-weight: 600;
+      font-size: 0.95rem
+    }
+
+    .topt .td2 {
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-top: 2px
+    }
+
+    .topt .tp {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 1.5rem;
+      color: var(--accent2)
+    }
+
+    .pcard {
+      background: linear-gradient(145deg, rgba(30,20,40,0.6), rgba(20,15,30,0.7));
+      backdrop-filter: blur(32px) saturate(200%);
+      -webkit-backdrop-filter: blur(32px) saturate(200%);
+      border: 1px solid rgba(255,255,255,0.12);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.1);
+      border-radius: 20px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .pcard::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent), var(--accent2))
+    }
+
+    .ph {
+      padding: 1.5rem 1.5rem 1rem;
+      border-bottom: 1px dashed var(--border)
+    }
+
+    .pclub {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 2rem;
+      letter-spacing: 0.1em;
+      color: var(--accent)
+    }
+
+    .plbl {
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-top: 0.2rem
+    }
+
+    .pbody {
+      padding: 1.5rem;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 1rem;
+      align-items: start
+    }
+
+    .pdet {
+      display: grid;
+      gap: 0.7rem
+    }
+
+    .pr .pk {
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted)
+    }
+
+    .pr .pv {
+      font-size: 0.95rem;
+      font-weight: 500;
+      margin-top: 2px
+    }
+
+    .ptok {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 2.5rem;
+      letter-spacing: 0.15em;
+      color: var(--accent2);
+      text-align: center
+    }
+
+    .ptok small {
+      display: block;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.7rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-top: -4px
+    }
+
+    #pass-qr {
+      display: flex;
+      justify-content: center;
+      min-height: 148px;
+      align-items: center
+    }
+
+    #pass-qr canvas,
+    #pass-qr img {
+      border-radius: 8px;
+      border: 4px solid #fff
+    }
+
+    .qr-spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent2);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg)
+      }
+    }
+
+    .pfooter {
+      padding: 1rem 1.5rem;
+      background: rgba(255, 215, 0, 0.05);
+      border-top: 1px solid var(--border);
+      font-size: 0.78rem;
+      color: var(--muted);
+      text-align: center
+    }
+
+    .sgrid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .sbox {
+      background: var(--glass);
+      backdrop-filter: blur(20px) saturate(160%);
+      -webkit-backdrop-filter: blur(20px) saturate(160%);
+      border: 1px solid var(--glass-stroke);
+      box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,0.07);
+      border-radius: 14px;
+      padding: 1rem;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .sbox:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1);
+    }
+
+    .sbox .sv {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 2.2rem;
+      color: var(--accent2);
+      line-height: 1;
+    }
+
+    .sbox .sl {
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .sbox.wb {
+      border-color: rgba(255, 102, 178, 0.2);
+      background: rgba(255, 102, 178, 0.06);
+    }
+
+    .sbox.wb .sv {
+      color: var(--red)
+    }
+
+    .tw {
+      overflow-x: auto;
+      border-radius: 16px;
+      border: 1px solid var(--glass-stroke);
+      background: var(--glass);
+      backdrop-filter: blur(20px) saturate(160%);
+      -webkit-backdrop-filter: blur(20px) saturate(160%);
+      box-shadow: var(--shadow);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+    }
+
+    th {
+      padding: 0.75rem 1rem;
+      text-align: left;
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      background: rgba(255,255,255,0.04);
+      border-bottom: 1px solid var(--glass-stroke);
+    }
+
+    td {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      vertical-align: middle;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:hover td {
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 99px;
+      font-size: 0.72rem;
+      font-weight: 600
+    }
+
+    .badge.vip {
+      background: rgba(255, 215, 0, 0.15);
+      color: var(--accent2)
+    }
+
+    .badge.general {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--muted)
+    }
+
+    .badge.guestlist {
+      background: rgba(0, 230, 118, 0.1);
+      color: var(--green)
+    }
+
+    .badge.used {
+      background: rgba(0, 230, 118, 0.1);
+      color: var(--green)
+    }
+
+    .badge.waiting {
+      background: rgba(255, 215, 0, 0.1);
+      color: var(--yellow)
+    }
+
+    .swrap {
+      position: relative;
+      border-radius: 18px;
+      overflow: hidden;
+      background: #000;
+      aspect-ratio: 1;
+      border: 1px solid var(--glass-stroke);
+      box-shadow: var(--shadow-lg);
+      margin-bottom: 1rem;
+    }
+
+    #scvid {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block
+    }
+
+    .sovl {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none
+    }
+
+    .sbox2 {
+      width: 60%;
+      aspect-ratio: 1;
+      border: 2px solid var(--accent2);
+      border-radius: 8px;
+      box-shadow: 0 0 0 999px rgba(0, 0, 0, 0.45)
+    }
+
+    .sres {
+      border-radius: 18px;
+      padding: 1.5rem;
+      text-align: center;
+      display: none;
+      backdrop-filter: blur(24px) saturate(160%);
+      -webkit-backdrop-filter: blur(24px) saturate(160%);
+      box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,0.08);
+    }
+
+    .sres.green {
+      background: rgba(48, 209, 88, 0.1);
+      border: 1px solid rgba(48, 209, 88, 0.25);
+    }
+
+    .sres.red {
+      background: rgba(255, 69, 100, 0.1);
+      border: 1px solid rgba(255, 102, 178, 0.25);
+    }
+
+    .sres.yellow {
+      background: rgba(255, 214, 10, 0.1);
+      border: 1px solid rgba(255, 214, 10, 0.25);
+    }
+
+    .sres .bico {
+      font-size: 3rem;
+      margin-bottom: 0.5rem
+    }
+
+    .sres .sname {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 2rem
+    }
+
+    .retog {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--glass);
+      backdrop-filter: blur(20px) saturate(160%);
+      -webkit-backdrop-filter: blur(20px) saturate(160%);
+      border: 1px solid var(--glass-stroke);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.07);
+      border-radius: 14px;
+      padding: 0.9rem 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .tsw {
+      position: relative;
+      width: 44px;
+      height: 24px;
+      cursor: pointer
+    }
+
+    .tsw input {
+      opacity: 0;
+      width: 0;
+      height: 0
+    }
+
+    .tsl {
+      position: absolute;
+      inset: 0;
+      background: var(--border);
+      border-radius: 99px;
+      transition: 0.3s
+    }
+
+    .tsl:before {
+      content: '';
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      left: 3px;
+      bottom: 3px;
+      background: #fff;
+      border-radius: 50%;
+      transition: 0.3s
+    }
+
+    .tsw input:checked+.tsl {
+      background: var(--accent2)
+    }
+
+    .tsw input:checked+.tsl:before {
+      transform: translateX(20px)
+    }
+
+    .capwrap {
+      margin-bottom: 1.5rem
+    }
+
+    .caplbl {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-bottom: 0.4rem
+    }
+
+    .capbar {
+      height: 8px;
+      background: var(--border);
+      border-radius: 99px;
+      overflow: hidden
+    }
+
+    .capfill {
+      height: 100%;
+      border-radius: 99px;
+      background: var(--green);
+      transition: width 0.4s, background 0.4s
+    }
+
+    .wbadge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--glass);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--glass-stroke);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+      border-radius: 10px;
+      padding: 0.5rem 0.9rem;
+      font-size: 0.8rem;
+      margin-bottom: 1rem;
+    }
+
+    .wdot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse 1.5s infinite
+    }
+
+    .wdot.off {
+      background: var(--red);
+      animation: none
+    }
+
+    @keyframes pulse {
+
+      0%,
+      100% {
+        opacity: 1
+      }
+
+      50% {
+        opacity: 0.4
+      }
+    }
+
+    .cban {
+      background: rgba(255, 59, 59, 0.1);
+      border: 1px solid rgba(255, 59, 59, 0.3);
+      border-radius: 10px;
+      padding: 1.5rem;
+      text-align: center;
+      margin-bottom: 1rem
+    }
+
+    .cban h2 {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 2rem;
+      color: var(--red)
+    }
+
+    .scan-engine {
+      position: absolute;
+      bottom: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.7);
+      color: var(--muted);
+      font-size: 0.65rem;
+      padding: 2px 8px;
+      border-radius: 4px
+    }
+
+    .pin-ov {
+      position: fixed;
+      inset: 0;
+      background: rgba(4, 4, 12, 0.75);
+      backdrop-filter: blur(40px) saturate(180%);
+      -webkit-backdrop-filter: blur(40px) saturate(180%);
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .pin-box {
+      background: rgba(255,255,255,0.07);
+      backdrop-filter: blur(40px) saturate(200%);
+      -webkit-backdrop-filter: blur(40px) saturate(200%);
+      border: 1px solid rgba(255,255,255,0.14);
+      box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(255,255,255,0.12);
+      border-radius: 24px;
+      padding: 2rem;
+      width: 320px;
+      text-align: center;
+    }
+
+    .pin-box h2 {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 2rem;
+      margin-bottom: 0.5rem
+    }
+
+    .pin-box p {
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin-bottom: 1.5rem
+    }
+
+    .pdots {
+      display: flex;
+      justify-content: center;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem
+    }
+
+    .pd {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--border);
+      transition: background 0.2s
+    }
+
+    .pd.f {
+      background: var(--accent)
+    }
+
+    .pkpad {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.6rem
+    }
+
+    .key {
+      background: rgba(255,255,255,0.08);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.12);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.1);
+      border-radius: 12px;
+      padding: 0.9rem;
+      cursor: pointer;
+      font-size: 1.1rem;
+      font-weight: 600;
+      transition: all 0.18s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    }
+
+    .key:hover {
+      background: rgba(255,102,178,0.15);
+      border-color: rgba(255,102,178,0.4);
+      color: var(--accent);
+      transform: scale(1.03);
+    }
+    .key:active {
+      transform: scale(0.96);
+    }
+
+    .key.del {
+      color: var(--red)
+    }
+
+    .mov {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(6px);
+      z-index: 300;
+      display: none;
+      align-items: center;
+      justify-content: center
+    }
+
+    .mov.show {
+      display: flex
+    }
+
+    .mbox {
+      background: #fff;
+      color: #222;
+      border-radius: 14px;
+      padding: 2rem;
+      width: 340px
+    }
+
+    .mbox .rph {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem
+    }
+
+    .mbox .rplogo {
+      font-weight: 800;
+      font-size: 1.1rem;
+      color: #072654
+    }
+
+    .mbox .rpamt {
+      font-size: 1.8rem;
+      font-weight: 700;
+      margin-bottom: 0.25rem
+    }
+
+    .mbox .rpdesc {
+      font-size: 0.82rem;
+      color: #666;
+      margin-bottom: 1.5rem
+    }
+
+    .mbox .pms {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem
+    }
+
+    .pm {
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 0.6rem;
+      text-align: center;
+      cursor: pointer;
+      font-size: 0.78rem;
+      font-weight: 600;
+      transition: all 0.2s
+    }
+
+    .pm.sel {
+      border-color: #072654;
+      background: #f0f4ff
+    }
+
+    .mbox .pbtn {
+      background: #072654;
+      color: #fff;
+      width: 100%;
+      padding: 0.85rem;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer
+    }
+
+    .mbox .pcancel {
+      display: block;
+      text-align: center;
+      margin-top: 0.75rem;
+      font-size: 0.8rem;
+      color: #999;
+      cursor: pointer
+    }
+
+    .sr {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1rem
+    }
+
+    .sr input {
+      flex: 1
+    }
+
+    .admin-actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-bottom: 1.5rem
+    }
+
+    .mt1 {
+      margin-top: 0.5rem
+    }
+
+    .mt2 {
+      margin-top: 1rem
+    }
+
+    .row {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center
+    }
+
+    .f1 {
+      flex: 1
+    }
+
+    .tc {
+      text-align: center
+    }
+
+    .tm {
+      color: var(--muted);
+      font-size: 0.82rem
+    }
+
+    .div {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 1.5rem 0
+    }
+
+    .wanote {
+      background: rgba(37, 211, 102, 0.08);
+      border: 1px solid rgba(37, 211, 102, 0.2);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      font-size: 0.82rem;
+      color: #25D366;
+      margin-top: 0.5rem
+    }
+
+    .storage-warn {
+      background: rgba(255, 215, 0, 0.08);
+      border: 1px solid rgba(255, 215, 0, 0.2);
+      border-radius: 8px;
+      padding: 0.6rem 0.9rem;
+      font-size: 0.78rem;
+      color: var(--yellow);
+      margin-bottom: 1rem;
+      display: none
+    }
+
+    @media(max-width:600px) {
+      .nav-logo {
+        font-size: 1.2rem
+      }
+
+      .tab-btn {
+        padding: 0 0.45rem;
+        font-size: 0.63rem
+      }
+
+      .sh h1 {
+        font-size: 2rem
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <nav>
+    <div class="nav-logo" id="nav-logo">VOID</div>
+    <div class="nav-tabs">
+      <button class="tab-btn active" onclick="gotoPage('checkin',this)">Check In</button>
+      <button class="tab-btn" onclick="needPin('bouncer','scanner',this)">🔍 Scan</button>
+      <button class="tab-btn" onclick="needPin('admin','admin',this)">Admin</button>
+      <button class="tab-btn" onclick="needPin('admin','guestlist',this)">Guest List</button>
+    </div>
+  </nav>
+
+  <!-- ═══ CHECK IN ═══ -->
+  <div id="page-checkin" class="page active">
+    <div class="sh">
+      <h1 id="hdr-club">VOIDCLUB</h1>
+      <p id="hdr-event">Secure your entry pass</p>
+    </div>
+
+    <div id="ban-closed" class="cban" style="display:none">
+      <h2>🚫 DOORS CLOSED</h2>
+      <p id="ban-closed-msg" style="color:var(--muted);margin-top:0.5rem"></p>
+    </div>
+    <div id="ban-full" class="cban" style="display:none">
+      <h2>🚫 AT CAPACITY</h2>
+      <p style="color:var(--muted);margin-top:0.5rem">Venue is full tonight. No more entries.</p>
+    </div>
+
+    <div id="checkin-body">
+      <div class="prg">
+        <div class="ps active" id="pr1"></div>
+        <div class="ps" id="pr2"></div>
+        <div class="ps" id="pr3"></div>
+        <div class="ps" id="pr4"></div>
+      </div>
+
+      <!-- Step 1 -->
+      <div id="s1">
+        <div class="card">
+          <div class="alert err" id="s1-err"></div>
+          <div class="field"><label>Full Name</label><input id="fn" type="text" placeholder="Your name"
+              autocomplete="name" onkeydown="if(event.key==='Enter') s1next()"></div>
+          <div class="field"><label>WhatsApp Number</label><input id="fw" type="tel" maxlength="10"
+              placeholder="10-digit" oninput="this.value=this.value.replace(/\D/g,'')"
+              onkeydown="if(event.key==='Enter') s1next()"></div>
+          <div class="field"><label>Aadhaar Number</label><input id="fa" type="text" maxlength="14"
+              placeholder="XXXX XXXX XXXX" oninput="fmtAadhar(this)" onkeydown="if(event.key==='Enter') s1next()"></div>
+          <div class="field">
+            <label>Party Size</label>
+            <select id="fp" onchange="buildAgeFields()" onkeydown="if(event.key==='Enter') s1next()">
+              <option value="1">1 — just me</option>
+              <option value="2">2 people</option>
+              <option value="3">3 people</option>
+              <option value="4">4 people</option>
+              <option value="5">5 people</option>
+            </select>
+          </div>
+          <div class="field" id="age-wrap"></div>
+          <button class="btn" id="s1-btn" onclick="s1next()">Continue →</button>
+        </div>
+      </div>
+
+      <!-- Step 2 -->
+      <div id="s2" style="display:none">
+        <div class="tgrid" id="tgrid"></div>
+        <div id="glvbox" style="display:none" class="card">
+          <div class="alert wrn show">Guest List — enter exact name AND WhatsApp number as registered</div>
+          <div class="field"><label>Registered WhatsApp</label><input id="glw" type="tel" maxlength="10"
+              placeholder="10-digit" oninput="this.value=this.value.replace(/\D/g,'')"></div>
+          <div class="field"><label>Full Name on Guest List</label><input id="gln" type="text"
+              placeholder="Exact spelling"></div>
+          <div class="alert err" id="gl-err"></div>
+          <div class="alert ok" id="gl-ok"></div>
+          <button class="btn out sm" onclick="verifyGL()">Verify</button>
+        </div>
+        <button class="btn mt2" onclick="s2next()">Proceed to Payment →</button>
+        <button class="btn sec mt1" onclick="gotoStep(1)">← Back</button>
+      </div>
+
+      <!-- Step 3 -->
+      <div id="s3" style="display:none">
+        <div class="card tc">
+          <p class="tm" style="margin-bottom:0.5rem">Amount due</p>
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:3rem;color:var(--accent2)" id="pay-amt">₹500</div>
+          <p class="tm mt1" id="pay-desc">—</p>
+          <p style="font-size:0.82rem;color:var(--accent2);margin-top:0.3rem;font-weight:600" id="pay-brk"></p>
+          <button class="btn mt2" onclick="openPay()">Pay Now →</button>
+          <button class="btn sec mt1" onclick="gotoStep(2)">← Back</button>
+        </div>
+        <div class="wanote">📱 QR entry pass sent to WhatsApp after payment</div>
+      </div>
+
+      <!-- Step 4 -->
+      <div id="s4" style="display:none">
+        <div class="alert ok show">✅ Payment confirmed! Generating your pass…</div>
+        <div id="pass-loading" style="text-align:center;padding:2rem">
+          <div class="qr-spinner" style="margin:0 auto 0.75rem"></div>
+          <p class="tm">Generating entry pass…</p>
+        </div>
+        <div id="pass-ready" style="display:none">
+          <div class="alert ok show" id="wa-sent-msg">✅ Pass sent to WhatsApp</div>
+          <div class="pcard">
+            <div class="ph">
+              <div class="pclub" id="p-club">VOIDCLUB</div>
+              <div class="plbl" id="p-evname">ENTRY PASS</div>
+            </div>
+            <div class="pbody">
+              <div class="pdet">
+                <div class="pr">
+                  <div class="pk">Name</div>
+                  <div class="pv" id="p-name">—</div>
+                </div>
+                <div class="pr">
+                  <div class="pk">Type</div>
+                  <div class="pv" id="p-type">—</div>
+                </div>
+                <div class="pr">
+                  <div class="pk">Party</div>
+                  <div class="pv" id="p-party">—</div>
+                </div>
+                <div class="pr">
+                  <div class="pk">Paid</div>
+                  <div class="pv" id="p-paid">—</div>
+                </div>
+                <div class="pr">
+                  <div class="pk">Valid</div>
+                  <div class="pv" id="p-valid">—</div>
+                </div>
+              </div>
+              <div>
+                <div class="ptok" id="p-tok">—<small>TOKEN</small></div>
+              </div>
+            </div>
+            <div style="padding:1rem 1.5rem 1.5rem;display:flex;justify-content:center">
+              <div id="pass-qr"></div>
+            </div>
+            <div class="pfooter">Show QR at entrance · Valid tonight only · ID check required</div>
+          </div>
+          <div class="wanote mt2">📲 Also sent to WhatsApp. Screenshot or keep chat open at the door.</div>
+          <button class="btn out mt2" id="resend-btn" onclick="resendWA()" data-token="">↩ Resend to WhatsApp</button>
+          <button class="btn sec mt1" onclick="resetCI()">← New Check-In</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ SCANNER ═══ -->
+  <div id="page-scanner" class="page">
+    <div class="sh">
+      <h1>SCAN</h1>
+      <p>Bouncer entry verification</p>
+    </div>
+    <div class="wbadge" id="wbadge">
+      <div class="wdot" id="wdot"></div><span id="wlbl">Checking…</span>
+    </div>
+    <div class="retog">
+      <div>
+        <div style="font-weight:600;font-size:0.9rem">Re-Entry Mode</div>
+        <div style="font-size:0.75rem;color:var(--muted)">Allow already-scanned tokens (guest stepped out)</div>
+      </div>
+      <label class="tsw"><input type="checkbox" id="re-tog" onchange="reentryMode=this.checked;hideRes()"><span
+          class="tsl"></span></label>
+    </div>
+    <div class="swrap">
+      <video id="scvid" autoplay muted playsinline></video>
+      <div class="sovl">
+        <div class="sbox2"></div>
+      </div>
+      <div class="scan-engine" id="scan-engine-lbl">—</div>
+    </div>
+    <button class="btn out" id="cam-btn" onclick="toggleCam()">Start Camera</button>
+    <div class="div"></div>
+    <p class="tm tc" style="margin-bottom:0.75rem;font-size:0.8rem">OR enter token manually</p>
+    <div class="row">
+      <input id="mtok" type="text" placeholder="6-char token e.g. A3K9X2" maxlength="6" style="text-transform:uppercase"
+        oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key==='Enter') manualV()" class="f1">
+      <button class="btn sm" onclick="manualV()">Verify</button>
+    </div>
+    <div class="sres green mt2" id="r-ok">
+      <div class="bico">✅</div>
+      <div class="sname" id="r-ok-name">—</div>
+      <div class="mt1" id="r-ok-det">—</div>
+      <div style="font-size:0.75rem;color:var(--muted);margin-top:0.5rem">⚠️ Verify photo ID matches this name before
+        entry</div>
+    </div>
+    <div class="sres yellow mt2" id="r-reentry">
+      <div class="bico">🔄</div>
+      <div class="sname" id="r-re-name">—</div>
+      <div class="mt1" id="r-re-det">—</div>
+      <div style="font-size:0.75rem;color:var(--accent2);margin-top:0.5rem">RE-ENTRY MODE ACTIVE</div>
+    </div>
+    <div class="sres red mt2" id="r-fail">
+      <div class="bico">❌</div>
+      <div class="sname">INVALID TOKEN</div>
+      <div class="tm mt1">Not found in system</div>
+    </div>
+    <div class="sres red mt2" id="r-closed">
+      <div class="bico">🚫</div>
+      <div class="sname">DOORS CLOSED</div>
+      <div class="tm mt1" id="r-closed-msg">Outside entry window</div>
+    </div>
+    <div class="sres red mt2" id="r-exp">
+      <div class="bico">📅</div>
+      <div class="sname">EXPIRED PASS</div>
+      <div class="tm mt1" id="r-exp-det">—</div>
+    </div>
+    <div class="sres yellow mt2" id="r-dup">
+      <div class="bico">⚠️</div>
+      <div class="sname">ALREADY SCANNED</div>
+      <div class="tm mt1" id="r-dup-det">—</div>
+    </div>
+  </div>
+
+  <!-- ═══ ADMIN ═══ -->
+  <div id="page-admin" class="page wide">
+    <div class="sh" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem">
+      <div>
+        <h1>DASHBOARD</h1>
+        <p>Live event overview</p>
+      </div>
+    </div>
+    <div class="admin-actions">
+      <button class="btn sm out" onclick="exportCSV()">Export CSV</button>
+      <button class="btn sm ybtn" onclick="clearEventData()">🗑 Clear Event Data</button>
+    </div>
+    <div class="capwrap">
+      <div class="caplbl"><span>Venue Capacity</span><span id="cap-lbl">0 / 300</span></div>
+      <div class="capbar">
+        <div class="capfill" id="cap-fill" style="width:0%"></div>
+      </div>
+    </div>
+    <div class="sgrid">
+      <div class="sbox">
+        <div class="sv" id="st-in">0</div>
+        <div class="sl">People Inside</div>
+      </div>
+      <div class="sbox">
+        <div class="sv" id="st-vip">0</div>
+        <div class="sl">VIP</div>
+      </div>
+      <div class="sbox">
+        <div class="sv" id="st-gen">0</div>
+        <div class="sl">General</div>
+      </div>
+      <div class="sbox">
+        <div class="sv" id="st-gl">0</div>
+        <div class="sl">Guest List</div>
+      </div>
+      <div class="sbox">
+        <div class="sv" id="st-book">0</div>
+        <div class="sl">Bookings</div>
+      </div>
+      <div class="sbox">
+        <div class="sv" id="st-rev">₹0</div>
+        <div class="sl">Revenue</div>
+      </div>
+      <div class="sbox wb">
+        <div class="sv" id="st-dup">0</div>
+        <div class="sl">Flags</div>
+      </div>
+      <div class="sbox">
+        <div class="sv" id="st-wait">0</div>
+        <div class="sl">Yet to Enter</div>
+      </div>
+    </div>
+    <div class="sr"><input id="s-inp" type="text" placeholder="Search name, token, WhatsApp…" oninput="renderTbl()">
+    </div>
+    <div class="tw">
+      <table>
+        <thead>
+          <tr>
+            <th>Token</th>
+            <th>Name</th>
+            <th>WhatsApp</th>
+            <th>Aadhaar</th>
+            <th>Type</th>
+            <th>Party</th>
+            <th>Paid</th>
+            <th>Time</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="atbl"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══ GUEST LIST ═══ -->
+  <div id="page-guestlist" class="page wide">
+    <div class="sh" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem">
+      <div>
+        <h1>GUEST LIST</h1>
+        <p>Pre-approved · <span id="gl-cnt">0</span> added · <span id="gl-cin">0</span> checked in</p>
+      </div>
+      <button class="btn sm out" onclick="exportGL()">Export CSV</button>
+    </div>
+    <div class="card">
+      <p class="tm" style="margin-bottom:0.75rem;font-size:0.82rem">Both name AND WhatsApp must match exactly at
+        check-in</p>
+      <div
+        style="display:grid;grid-template-columns:1fr 1fr 80px auto;gap:0.5rem;margin-bottom:0.75rem;align-items:end">
+        <div><label>Full Name</label><input id="gl-nm" type="text" placeholder="Guest name"></div>
+        <div><label>WhatsApp</label><input id="gl-wa" type="tel" maxlength="10" placeholder="10-digit"
+            oninput="this.value=this.value.replace(/\D/g,'')"></div>
+        <div><label>Party</label><input id="gl-ps" type="number" min="1" max="5" step="1" value="1" placeholder="1">
+        </div>
+        <button class="btn sm" style="align-self:end" onclick="addGL()">Add</button>
+      </div>
+      <div class="alert err" id="gl-add-err"></div>
+    </div>
+    <div class="tw">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Name</th>
+            <th>WhatsApp</th>
+            <th>Party Allowed</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="gltbl"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══ PIN ═══ -->
+  <div class="pin-ov" id="pin-ov" style="display:none">
+    <div class="pin-box">
+      <h2 id="pin-title">🔒 ACCESS</h2>
+      <p id="pin-sub">Enter PIN to continue</p>
+      <div class="pdots">
+        <div class="pd" id="pd0"></div>
+        <div class="pd" id="pd1"></div>
+        <div class="pd" id="pd2"></div>
+        <div class="pd" id="pd3"></div>
+      </div>
+      <div class="alert err" id="pin-err" style="margin-bottom:1rem;display:none"></div>
+      <div class="pkpad">
+        <div class="key" onclick="pk('1')">1</div>
+        <div class="key" onclick="pk('2')">2</div>
+        <div class="key" onclick="pk('3')">3</div>
+        <div class="key" onclick="pk('4')">4</div>
+        <div class="key" onclick="pk('5')">5</div>
+        <div class="key" onclick="pk('6')">6</div>
+        <div class="key" onclick="pk('7')">7</div>
+        <div class="key" onclick="pk('8')">8</div>
+        <div class="key" onclick="pk('9')">9</div>
+        <div class="key del" onclick="pdel()">⌫</div>
+        <div class="key" onclick="pk('0')">0</div>
+        <div class="key" onclick="pcancel()" style="color:var(--muted)">✕</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ KICK-OUT REASON MODAL ═══ -->
+  <div id="ko-modal"
+    style="display:none;position:fixed;inset:0;background:rgba(4,4,12,0.75);backdrop-filter:blur(40px) saturate(180%);-webkit-backdrop-filter:blur(40px) saturate(180%);z-index:400;align-items:center;justify-content:center">
+    <div
+      style="background:rgba(255,255,255,0.07);backdrop-filter:blur(40px) saturate(200%);-webkit-backdrop-filter:blur(40px) saturate(200%);border:1px solid rgba(255,255,255,0.14);box-shadow:0 20px 60px rgba(0,0,0,0.7),inset 0 1px 0 rgba(255,255,255,0.12);border-radius:24px;padding:2rem;width:340px;max-width:90vw">
+      <h2 style="font-family:'Bebas Neue',sans-serif;font-size:1.8rem;color:var(--red);margin-bottom:0.4rem">⛔ Kick Out
+      </h2>
+      <p style="color:var(--muted);font-size:0.85rem;margin-bottom:1.2rem">Token: <span id="ko-tok"
+          style="color:var(--accent2);font-family:'Bebas Neue',sans-serif;letter-spacing:0.1em"></span></p>
+      <label>Reason</label>
+      <input id="ko-reason" type="text" placeholder="e.g. Intoxicated, Fighting, No ID…" style="margin-bottom:1rem"
+        onkeydown="if(event.key==='Enter')koConfirm();if(event.key==='Escape')koCancel()">
+      <div class="alert err" id="ko-err" style="display:none;margin-bottom:1rem"></div>
+      <div style="display:flex;gap:0.5rem">
+        <button class="btn dbtn" onclick="koConfirm()" id="ko-btn">Confirm Kick Out</button>
+        <button class="btn sec" style="width:auto;padding:0.9rem 1.2rem" onclick="koCancel()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════
+       SCRIPTS — API-based
+  ═══════════════════════════════ -->
+  <script>
+    // ── CONFIG (loaded from server) ──
+    let CFG = {};
+    let authToken = '';
+    let authRole = '';
+    let selTkt = null, glOK = false, reentryMode = false;
+    let pendPin = null, pinBuf = '';
+    let camStream = null, camActive = false, camInterval = null;
+    let s1Busy = false;
+    let pendingCheckin = null; // stores form data during payment
+
+    // -- PIN Keyboard Support --
+    document.addEventListener('keydown', (e) => {
+      const pinOv = document.getElementById('pin-ov');
+      if (pinOv && pinOv.style.display !== 'none') {
+        if (e.key >= '0' && e.key <= '9') pk(e.key);
+        else if (e.key === 'Backspace') pdel();
+        else if (e.key === 'Escape') pcancel();
+      }
+    });
+
+    // ── API Helper ──
+    async function api(url, opts = {}) {
+      const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+      if (authToken) headers['Authorization'] = 'Bearer ' + authToken;
+      const resp = await fetch(url, { ...opts, headers });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw { status: resp.status, ...data };
+      return data;
+    }
+
+    // ── INIT ──
+    window.onload = async () => {
+      try {
+        CFG = await api('/api/auth/config');
+      } catch (e) {
+        console.error('Failed to load config:', e);
+        CFG = { clubName: 'VOIDCLUB', eventName: '', maxCapacity: 300, maxPartySize: 5, devMode: true, doorsOpen: '21:00', doorsClose: '03:00', tickets: [] };
+      }
+
+      document.getElementById('nav-logo').textContent = CFG.clubName;
+      document.getElementById('hdr-club').textContent = CFG.clubName;
+      document.getElementById('hdr-event').textContent = CFG.eventName || 'Secure your entry pass';
+      document.getElementById('p-club').textContent = CFG.clubName;
+      document.getElementById('p-evname').textContent = (CFG.eventName || '') + ' · ENTRY PASS';
+      buildAgeFields(); checkWindow(); updateBadge();
+      setInterval(updateBadge, 60000);
+    };
+
+    // ── FORMATTERS ──
+    function fmtAadhar(el) { let v = el.value.replace(/\D/g, '').slice(0, 12); el.value = v.replace(/(\d{4})(?=\d)/g, '$1 ').trim(); }
+    function validAadhar(r) { return /^\d{12}$/.test(r.replace(/\s/g, '')); }
+    function rawAadhar(r) { return r.replace(/\s/g, ''); }
+    function maskWA(n) { return n ? '••••••' + n.slice(-4) : '—'; }
+    function maskAA(a) { return a && a.length === 12 ? 'XXXX XXXX ' + a.slice(-4) : '—'; }
+    function fmtT(ts) { return new Date(ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }); }
+
+    // ── ENTRY WINDOW ──
+    function inWindow() {
+      const now = new Date();
+      const [oh, om] = CFG.doorsOpen.split(':').map(Number);
+      const [ch, cm] = CFG.doorsClose.split(':').map(Number);
+      const nowM = now.getHours() * 60 + now.getMinutes();
+      const openM = oh * 60 + om; let closeM = ch * 60 + cm;
+      if (closeM < openM) closeM += 1440;
+      const adjNow = nowM < openM ? nowM + 1440 : nowM;
+      return adjNow >= openM && adjNow <= closeM;
+    }
+
+    function checkWindow() {
+      const open = CFG.devMode ? true : inWindow();
+      document.getElementById('ban-closed').style.display = !open ? 'block' : 'none';
+      document.getElementById('ban-full').style.display = 'none'; // server handles capacity
+      document.getElementById('checkin-body').style.display = open ? 'block' : 'none';
+      if (!open) document.getElementById('ban-closed-msg').textContent = 'Doors open ' + CFG.doorsOpen + ' – ' + CFG.doorsClose;
+    }
+
+    function updateBadge() {
+      const open = CFG.doorsOpen ? inWindow() : true;
+      const dot = document.getElementById('wdot'), lbl = document.getElementById('wlbl');
+      if (!dot || !lbl) return;
+      dot.className = 'wdot' + (open ? '' : ' off');
+      lbl.textContent = open ? 'Doors open · ' + CFG.doorsOpen + '–' + CFG.doorsClose : 'Doors closed · Opens ' + CFG.doorsOpen;
+    }
+
+    // ── NAV ──
+    function gotoPage(id, btn) {
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById('page-' + id).classList.add('active');
+      if (btn) btn.classList.add('active');
+      if (id !== 'scanner') stopCam();
+      if (id === 'admin') { renderStats(); renderTbl(); }
+      if (id === 'guestlist') { renderGL(); }
+      if (id === 'scanner') { updateBadge(); hideRes(); }
+      if (id === 'checkin') { checkWindow(); }
+    }
+
+    function needPin(role, page, btn) {
+      // Always require PIN — no session bypass
+      pendPin = { role, page, btn }; pinBuf = ''; updDots();
+      document.getElementById('pin-title').textContent = role === 'admin' ? '🔒 ADMIN ACCESS' : '🔒 BOUNCER ACCESS';
+      document.getElementById('pin-sub').textContent = role === 'admin' ? 'Enter Admin PIN' : 'Enter Bouncer PIN';
+      document.getElementById('pin-err').style.display = 'none';
+      document.getElementById('pin-ov').style.display = 'flex';
+    }
+
+    // ── PIN (server-verified) ──
+    function pk(k) { if (pinBuf.length >= 4) return; pinBuf += k; updDots(); if (pinBuf.length === 4) setTimeout(chkPin, 100); }
+
+    async function chkPin() {
+      try {
+        const { token, role } = await api('/api/auth/verify', {
+          method: 'POST',
+          body: JSON.stringify({ pin: pinBuf })
+        });
+        authToken = token;
+        authRole = role;
+        document.getElementById('pin-ov').style.display = 'none';
+        const { page, btn } = pendPin;
+        gotoPage(page, btn);
+      } catch (e) {
+        const err = document.getElementById('pin-err');
+        err.textContent = 'Incorrect PIN. Try again.';
+        err.style.display = 'block';
+        pinBuf = ''; updDots();
+      }
+    }
+
+    function pdel() { pinBuf = pinBuf.slice(0, -1); updDots(); }
+    function pcancel() { document.getElementById('pin-ov').style.display = 'none'; }
+    function updDots() { for (let i = 0; i < 4; i++) document.getElementById('pd' + i).className = 'pd' + (i < pinBuf.length ? ' f' : ''); }
+
+    // ── AGE FIELDS ──
+    function buildAgeFields() {
+      const sz = parseInt(document.getElementById('fp').value) || 1;
+      const w = document.getElementById('age-wrap');
+      const L = ['You', ...Array.from({ length: sz - 1 }, (_, i) => 'Guest ' + (i + 1))];
+      if (sz === 1) {
+        w.innerHTML = '<label>Your Age</label><input id="age0" type="number" min="18" max="99" step="1" placeholder="Must be 18+" oninput="if(this.value>99)this.value=99;" onkeydown="if(event.key===\'Enter\') s1next()">';
+      } else {
+        w.innerHTML = `<label>Ages — all ${sz} people <span style="color:var(--accent)">· ALL must be 18+</span></label>
+        <div style="font-size:0.75rem;color:var(--muted);margin-bottom:0.5rem">One box per person · e.g. <span style="color:var(--accent2)">${Array.from({ length: sz }, (_, i) => 18 + i).join(', ')}</span></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:0.5rem">
+        ${L.map((l, i) => `<div><div style="font-size:0.68rem;color:var(--muted);margin-bottom:3px;text-transform:uppercase">${l}</div>
+        <input id="age${i}" type="number" min="18" max="99" step="1" oninput="if(this.value>99)this.value=99;" onkeydown="if(event.key==='Enter') s1next()" placeholder="Age" style="padding:0.6rem 0.75rem;font-size:0.9rem"></div>`).join('')}
+        </div><div style="font-size:0.75rem;color:var(--muted);margin-top:0.5rem">⚠️ Any person under 18 = entire group denied</div>`;
+      }
+    }
+
+    // ── STEP 1 ──
+    function s1next() {
+      if (s1Busy) return;
+      const name = document.getElementById('fn').value.trim();
+      const wa = document.getElementById('fw').value.trim();
+      const aaRaw = rawAadhar(document.getElementById('fa').value);
+      const sz = parseInt(document.getElementById('fp').value) || 1;
+      const err = document.getElementById('s1-err');
+      err.classList.remove('show');
+      const E = (m) => { err.textContent = m; err.classList.add('show'); err.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
+
+      if (!name) return E('Enter your full name.');
+      if (wa.length !== 10) return E('Enter a valid 10-digit WhatsApp number.');
+      if (!validAadhar(aaRaw)) return E('Invalid Aadhaar — exactly 12 digits required.');
+
+      // Age validation
+      const ages = [];
+      for (let i = 0; i < sz; i++) {
+        const raw = document.getElementById('age' + i)?.value;
+        const v = Number(raw);
+        if (!raw || !Number.isInteger(v) || v < 1) return E('Enter a whole number age for: ' + (i === 0 ? 'yourself' : 'Guest ' + i) + '.');
+        if (v < 18) return E((i === 0 ? 'You' : 'Guest ' + i) + ' must be 18+. Entire group denied.');
+        if (v > 99) return E('Age cannot exceed 99 for: ' + (i === 0 ? 'yourself' : 'Guest ' + i) + '.');
+        ages.push(v);
+      }
+
+      // Store form data for later
+      pendingCheckin = { name, wa, aadhar: aaRaw, party: sz, ages };
+
+      // Lock button briefly
+      s1Busy = true;
+      const btn = document.getElementById('s1-btn');
+      btn.classList.add('loading'); btn.disabled = true;
+      setTimeout(() => { s1Busy = false; btn.classList.remove('loading'); btn.disabled = false; }, 800);
+
+      gotoStep(2);
+    }
+
+    // ── TICKET GRID ──
+    function buildTGrid() {
+      const party = pendingCheckin?.party || parseInt(document.getElementById('fp')?.value) || 1;
+      if (!CFG.tickets) return;
+      document.getElementById('tgrid').innerHTML = CFG.tickets.map(t => `
+        <div class="topt" data-id="${t.id}" onclick="selTkt2('${t.id}')">
+          <div><div class="tn" style="color:${t.color}">${t.name}</div><div class="td2">${t.desc}</div></div>
+          <div style="text-align:right">
+            <div class="tp">₹${(t.price * party).toLocaleString('en-IN')}</div>
+            ${party > 1 ? `<div style="font-size:0.7rem;color:var(--muted)">${party}×₹${t.price}</div>` : ''}
+          </div>
+        </div>`).join('');
+    }
+
+    function selTkt2(id) {
+      selTkt = CFG.tickets.find(t => t.id === id);
+      document.querySelectorAll('.topt').forEach(el => el.classList.toggle('sel', el.dataset.id === id));
+      document.getElementById('glvbox').style.display = id === 'guestlist' ? 'block' : 'none';
+      if (id !== 'guestlist') glOK = false;
+    }
+
+    // ── GUEST LIST VERIFY (API) ──
+    async function verifyGL() {
+      const wa = document.getElementById('glw').value.trim();
+      const name = document.getElementById('gln').value.trim();
+      const E = document.getElementById('gl-err'), OK = document.getElementById('gl-ok');
+      E.classList.remove('show'); OK.classList.remove('show');
+      if (!wa || !name) { E.textContent = 'Enter both WhatsApp and name.'; E.classList.add('show'); return; }
+
+      try {
+        const pSz = pendingCheckin?.party || 1;
+        const result = await api('/api/guestlist/verify', {
+          method: 'POST',
+          body: JSON.stringify({ wa, name })
+        });
+        if (pSz > result.entry.party_allowed) {
+          E.textContent = `⚠️ Party of ${pSz} exceeds allowed ${result.entry.party_allowed}.`;
+          E.classList.add('show'); return;
+        }
+        OK.textContent = '✅ Verified! Welcome, ' + result.entry.name;
+        OK.classList.add('show');
+        glOK = true;
+      } catch (e) {
+        E.textContent = e.error || 'Verification failed.';
+        E.classList.add('show');
+      }
+    }
+
+    // ── STEP 2 ──
+    function s2next() {
+      if (!selTkt) { alert('Select a ticket type.'); return; }
+      if (selTkt.id === 'guestlist' && !glOK) { alert('Verify guest list first.'); return; }
+      const party = pendingCheckin?.party || 1;
+      const total = selTkt.price * party;
+      document.getElementById('pay-amt').textContent = '₹' + total.toLocaleString('en-IN');
+      document.getElementById('pay-desc').textContent = selTkt.name + ' · ' + party + ' person' + (party > 1 ? 's' : '');
+      document.getElementById('pay-brk').textContent = party > 1 ? party + '×₹' + selTkt.price + ' = ₹' + total.toLocaleString('en-IN') : '';
+      gotoStep(3);
+    }
+
+    // ── PAYMENT (Razorpay or Mock) ──
+    async function openPay() {
+      const party = pendingCheckin?.party || 1;
+      const total = selTkt.price * party;
+
+      try {
+        // Create order on server
+        const order = await api('/api/payments/create-order', {
+          method: 'POST',
+          body: JSON.stringify({
+            amount: total,
+            ticketType: selTkt.id,
+            party,
+            name: pendingCheckin?.name || ''
+          })
+        });
+
+        if (order.mock) {
+          // Mock mode — simulate payment immediately
+          await api('/api/payments/verify', {
+            method: 'POST',
+            body: JSON.stringify({
+              razorpay_order_id: order.orderId,
+              razorpay_payment_id: 'pay_mock_' + Date.now(),
+              razorpay_signature: 'mock'
+            })
+          });
+          completeCI(order.orderId, 'pay_mock_' + Date.now());
+          return;
+        }
+
+        // Real Razorpay checkout
+        const options = {
+          key: order.keyId,
+          amount: order.amount,
+          currency: order.currency,
+          name: CFG.clubName,
+          description: selTkt.name + ' Entry',
+          order_id: order.orderId,
+          handler: async function (response) {
+            try {
+              await api('/api/payments/verify', {
+                method: 'POST',
+                body: JSON.stringify(response)
+              });
+              completeCI(response.razorpay_order_id, response.razorpay_payment_id);
+            } catch (e) {
+              alert('Payment verification failed. Contact support.');
+            }
+          },
+          prefill: {
+            name: pendingCheckin?.name || '',
+            contact: pendingCheckin?.wa || ''
+          },
+          theme: { color: '#FF3B3B' }
+        };
+
+        const rzp = new Razorpay(options);
+        rzp.open();
+
+      } catch (e) {
+        console.error('[PAYMENT]', e);
+        alert('Failed to initiate payment. Please try again.');
+      }
+    }
+
+    // ── COMPLETE CHECK-IN (API) ──
+    async function completeCI(orderId, paymentId) {
+      if (!pendingCheckin || !selTkt) return;
+
+      const party = pendingCheckin.party;
+      const total = selTkt.price * party;
+
+      try {
+        const result = await api('/api/guests/checkin', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: pendingCheckin.name,
+            wa: pendingCheckin.wa,
+            aadhar: pendingCheckin.aadhar,
+            type: selTkt.id,
+            typeName: selTkt.name,
+            party,
+            ages: pendingCheckin.ages,
+            pricePerPerson: selTkt.price,
+            priceTotal: total,
+            paymentId,
+            orderId
+          })
+        });
+
+        const g = result.guest;
+
+        // Render pass
+        document.getElementById('p-name').textContent = g.name;
+        document.getElementById('p-type').textContent = g.type_name;
+        document.getElementById('p-party').textContent = g.party + (g.party > 1 ? ' people' : ' person');
+        document.getElementById('p-paid').textContent = '₹' + g.price_total.toLocaleString('en-IN');
+        document.getElementById('p-valid').textContent = CFG.doorsOpen + ' – ' + CFG.doorsClose + ' · Tonight only';
+        document.getElementById('p-tok').innerHTML = g.token + '<small>TOKEN</small>';
+        document.getElementById('resend-btn').dataset.token = g.token;
+
+        // Show loading → QR → pass
+        gotoStep(4);
+        document.getElementById('pass-loading').style.display = 'block';
+        document.getElementById('pass-ready').style.display = 'none';
+
+        const qrEl = document.getElementById('pass-qr');
+        qrEl.innerHTML = '';
+        setTimeout(() => {
+          new QRCode(qrEl, {
+            text: JSON.stringify({ token: g.token, name: g.name, type: g.type, party: g.party, ts: g.created_at, eventDate: g.event_date }),
+            width: 140, height: 140, colorDark: '#000', colorLight: '#fff', correctLevel: QRCode.CorrectLevel.H
+          });
+          const waitForQR = setInterval(() => {
+            if (qrEl.querySelector('canvas') || qrEl.querySelector('img')) {
+              clearInterval(waitForQR);
+              document.getElementById('pass-loading').style.display = 'none';
+              document.getElementById('pass-ready').style.display = 'block';
+            }
+          }, 100);
+        }, 50);
+
+      } catch (e) {
+        console.error('[CHECKIN]', e);
+        alert(e.error || 'Check-in failed. Please try again.');
+      }
+    }
+
+    // ── RESEND WHATSAPP ──
+    async function resendWA() {
+      const tok = document.getElementById('resend-btn').dataset.token;
+      if (!tok) return alert('No token found.');
+      try {
+        await api('/api/guests/resend/' + tok, { method: 'POST' });
+        alert('Resent to WhatsApp!');
+      } catch (e) {
+        alert('Failed to resend.');
+      }
+    }
+
+    // resetCI defined below (single authoritative version)
+
+    // ── ADMIN EXPORT (first definition — real one is below, this block removed) ──
+
+    async function adminForceIn(token) {
+      if (!authToken) {
+        alert('Session expired. Please re-authenticate as Admin.');
+        needPin('admin', 'admin', document.querySelectorAll('.tab-btn')[2]);
+        return;
+      }
+      if (!confirm(`Force entry for token ${token}?\nThis bypasses the scanner and marks the guest as entered.`)) return;
+      try {
+        const r = await api('/api/guests/' + token + '/force-entry', { method: 'POST' });
+        renderStats(); renderTbl();
+      } catch (e) {
+        console.error('[FORCE-IN]', e);
+        if (e.status === 401 || e.status === 403) {
+          authToken = ''; authRole = '';
+          alert('Session expired. Please re-enter Admin PIN.');
+          needPin('admin', 'admin', document.querySelectorAll('.tab-btn')[2]);
+        } else {
+          alert(e.error || 'Failed to force entry. Check console for details.');
+        }
+      }
+    }
+
+    function adminKickOut(token) {
+      if (!authToken) {
+        alert('Session expired. Please re-authenticate as Admin.');
+        needPin('admin', 'admin', document.querySelectorAll('.tab-btn')[2]);
+        return;
+      }
+      showKoModal(token);
+    }
+
+    // ── STEPS ──
+    function gotoStep(n) {
+      [1, 2, 3, 4].forEach(i => {
+        document.getElementById('s' + i).style.display = i === n ? 'block' : 'none';
+        const el = document.getElementById('pr' + i);
+        el.className = 'ps' + (i < n ? ' done' : i === n ? ' active' : '');
+      });
+      if (n === 2) { buildTGrid(); selTkt = null; glOK = false; document.getElementById('glvbox').style.display = 'none'; }
+      window.scrollTo(0, 0);
+    }
+
+    function resetCI() {
+      selTkt = null; glOK = false; pendingCheckin = null;
+      ['fn', 'fw', 'fa'].forEach(id => document.getElementById(id).value = '');
+      document.getElementById('fp').value = '1'; buildAgeFields();
+      document.getElementById('s1-err').classList.remove('show');
+      gotoStep(1); checkWindow();
+    }
+
+    // ── SCANNER ──
+    const hasBarcodeDetector = 'BarcodeDetector' in window;
+
+    async function toggleCam() {
+      if (camActive) { stopCam(); return; }
+      try {
+        camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } });
+        const vid = document.getElementById('scvid');
+        vid.srcObject = camStream;
+        vid.addEventListener('loadedmetadata', () => {
+          document.getElementById('cam-btn').textContent = 'Stop Camera';
+          document.getElementById('scan-engine-lbl').textContent =
+            hasBarcodeDetector ? 'Engine: jsQR + BarcodeDetector' : 'Engine: jsQR';
+          camActive = true; startScan();
+        }, { once: true });
+      } catch (e) { alert('Camera access denied or unavailable.'); }
+    }
+
+    function stopCam() {
+      if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
+      if (camInterval) { clearInterval(camInterval); camInterval = null; }
+      camActive = false;
+      document.getElementById('cam-btn').textContent = 'Start Camera';
+      document.getElementById('scan-engine-lbl').textContent = '—';
+    }
+
+    function startScan() {
+      const vid = document.getElementById('scvid');
+      const cv = document.createElement('canvas');
+      const ctx = cv.getContext('2d', { willReadFrequently: true });
+      camInterval = setInterval(() => {
+        if (!camActive || !vid.videoWidth) return;
+        cv.width = vid.videoWidth; cv.height = vid.videoHeight;
+        ctx.drawImage(vid, 0, 0);
+
+        // 1. Try jsQR first (works on HTTP & HTTPS, dark & light backgrounds)
+        const imageData = ctx.getImageData(0, 0, cv.width, cv.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'attemptBoth' });
+        if (code) { verifyTok(code.data); stopCam(); return; }
+
+        // 2. Fallback to BarcodeDetector (often faster, but restricted to HTTPS in some browsers)
+        if (hasBarcodeDetector) {
+          new BarcodeDetector({ formats: ['qr_code'] }).detect(cv).then(codes => {
+            if (codes.length > 0) { verifyTok(codes[0].rawValue); stopCam(); }
+          }).catch(() => { });
+        }
+      }, 300);
+    }
+
+    function manualV() {
+      const inp = document.getElementById('mtok');
+      const t = inp.value.trim().toUpperCase();
+      if (!t) return;
+      verifyTok(t);
+      inp.value = '';
+    }
+
+    // ── VERIFY TOKEN (API) ──
+    async function verifyTok(raw) {
+      if (!authToken) {
+        alert('Session expired. Please re-enter bouncer PIN.');
+        needPin('bouncer', 'scanner', document.querySelectorAll('.tab-btn')[1]);
+        return;
+      }
+      hideRes();
+      let tok = raw.trim().toUpperCase();
+      try { const o = JSON.parse(raw); tok = o.token.toUpperCase(); } catch (e) { }
+
+      try {
+        const result = await api('/api/guests/scan/' + tok, {
+          method: 'POST',
+          body: JSON.stringify({ reentry: reentryMode })
+        });
+
+        const g = result.guest;
+
+        if (result.status === 'reentry') {
+          document.getElementById('r-re-name').textContent = g.name.toUpperCase();
+          document.getElementById('r-re-det').innerHTML =
+            '<span style="color:var(--green)">Let in ' + g.party + (g.party > 1 ? ' people' : ' person') + '</span> · ' + g.type_name +
+            '<br><span style="font-size:0.8rem;color:var(--muted)">First scanned ' + fmtT(g.scan_time || g.created_at) + '</span>';
+          const reEl = document.getElementById('r-reentry');
+          reEl.style.display = 'block';
+          reEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          return;
+        }
+
+        // Success
+        document.getElementById('r-ok-name').textContent = g.name.toUpperCase();
+        document.getElementById('r-ok-det').innerHTML =
+          '<span style="font-size:1.1rem;font-weight:600;color:var(--green)">Let in ' + g.party + (g.party > 1 ? ' people' : ' person') + '  ·  ' + g.type_name + '</span>' +
+          '<br><span style="font-size:0.82rem;color:var(--muted)">Token ' + g.token + ' · Paid ₹' + g.price_total.toLocaleString('en-IN') + '</span>';
+        const okEl = document.getElementById('r-ok');
+        okEl.style.display = 'block';
+        okEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+      } catch (e) {
+        let errEl;
+        if (e.status === 401 || e.status === 403) {
+          // Auth expired — force re-auth
+          authToken = ''; authRole = '';
+          alert('Session expired. Please re-enter bouncer PIN.');
+          needPin('bouncer', 'scanner', document.querySelectorAll('.tab-btn')[1]);
+          return;
+        } else if (e.error === 'closed') {
+          document.getElementById('r-closed-msg').textContent = e.message;
+          errEl = document.getElementById('r-closed');
+        } else if (e.error === 'invalid') {
+          errEl = document.getElementById('r-fail');
+        } else if (e.error === 'expired') {
+          document.getElementById('r-exp-det').textContent = e.message;
+          errEl = document.getElementById('r-exp');
+        } else if (e.error === 'duplicate') {
+          const g = e.guest;
+          document.getElementById('r-dup-det').textContent = g.name + ' · Scanned at ' + fmtT(g.scan_time || g.created_at);
+          errEl = document.getElementById('r-dup');
+        } else if (e.error === 'banned') {
+          errEl = document.getElementById('r-fail');
+          document.querySelector('#r-fail .sname') && (document.querySelector('#r-fail .sname').textContent = 'BANNED — ENTRY DENIED');
+        } else {
+          errEl = document.getElementById('r-fail');
+        }
+        if (errEl) {
+          errEl.style.display = 'block';
+          errEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }
+    }
+
+    function hideRes() { ['r-ok', 'r-fail', 'r-dup', 'r-closed', 'r-exp', 'r-reentry'].forEach(id => document.getElementById(id).style.display = 'none'); }
+
+    // ── STATS (API) ──
+    async function renderStats() {
+      try {
+        const s = await api('/api/guests/stats');
+        document.getElementById('st-in').textContent = s.scannedIn;
+        document.getElementById('st-vip').textContent = s.vip;
+        document.getElementById('st-gen').textContent = s.general;
+        document.getElementById('st-gl').textContent = s.guestlist;
+        document.getElementById('st-book').textContent = s.bookings;
+        document.getElementById('st-rev').textContent = '₹' + s.revenue.toLocaleString('en-IN');
+        document.getElementById('st-dup').textContent = s.dupCount;
+        document.getElementById('st-wait').textContent = s.waiting;
+        document.getElementById('cap-lbl').textContent = s.totalPeople + ' / ' + s.maxCapacity;
+        const pct = Math.min(100, Math.round(s.totalPeople / s.maxCapacity * 100));
+        const f = document.getElementById('cap-fill');
+        f.style.width = pct + '%';
+        f.style.background = pct >= 95 ? 'var(--red)' : pct >= 80 ? 'var(--yellow)' : 'var(--green)';
+      } catch (e) { console.error('[STATS]', e); }
+    }
+
+    // ── ADMIN TABLE (API) ──
+    async function renderTbl() {
+      try {
+        const q = (document.getElementById('s-inp')?.value || '');
+        const guests = await api('/api/guests?q=' + encodeURIComponent(q));
+        const tb = document.getElementById('atbl'); if (!tb) return;
+        tb.innerHTML = guests.length === 0
+          ? `<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:2rem">No check-ins yet</td></tr>`
+          : guests.map(g => {
+            let actBtn = '';
+            if (g.kicked_out) {
+              actBtn = `<span style="font-size:0.75rem;color:var(--red);font-weight:600">BANNED</span>`;
+            } else if (!g.scanned) {
+              actBtn = `<button class="btn sm out" style="padding:0.25rem 0.5rem;font-size:0.7rem;color:var(--green);border-color:var(--green)" onclick="adminForceIn('${g.token}')">Force In</button>`;
+            } else {
+              actBtn = `<button class="btn sm out" style="padding:0.25rem 0.5rem;font-size:0.7rem;color:var(--red);border-color:var(--red)" onclick="adminKickOut('${g.token}')">Kick Out</button>`;
+            }
+            return `<tr>
+            <td><span style="font-family:'Bebas Neue',sans-serif;letter-spacing:0.1em">${g.token}</span></td>
+            <td>${g.name}</td><td>${maskWA(g.wa)}</td><td>${maskAA(g.aadhar)}</td>
+            <td><span class="badge ${g.type}">${g.type_name}</span></td>
+            <td>${g.party} ${g.party > 1 ? 'ppl' : 'person'}</td>
+            <td>₹${g.price_total.toLocaleString('en-IN')}${g.party > 1 ? `<br><span style="font-size:0.7rem;color:var(--muted)">${g.party}×₹${g.price_per_person}</span>` : ''}</td>
+            <td>${fmtT(g.created_at)}</td>
+            <td><span class="badge ${g.kicked_out ? 'waiting' : (g.scanned ? 'used' : 'waiting')}">${g.kicked_out ? 'Kicked Out' : (g.scanned ? '✓ In' : 'Waiting')}</span></td>
+            <td>${actBtn}</td>
+          </tr>`}).join('');
+      } catch (e) { console.error('[TABLE]', e); }
+    }
+
+    // ── GUEST LIST (API) ──
+    async function addGL() {
+      const name = document.getElementById('gl-nm').value.trim();
+      const wa = document.getElementById('gl-wa').value.trim();
+      const ps = parseInt(document.getElementById('gl-ps').value) || 1;
+      const err = document.getElementById('gl-add-err');
+      err.style.display = 'none';
+
+      try {
+        await api('/api/guestlist', {
+          method: 'POST',
+          body: JSON.stringify({ name, wa, partyAllowed: ps })
+        });
+        document.getElementById('gl-nm').value = '';
+        document.getElementById('gl-wa').value = '';
+        document.getElementById('gl-ps').value = '1';
+        renderGL();
+      } catch (e) {
+        err.textContent = e.error || 'Failed to add.';
+        err.style.display = 'block';
+      }
+    }
+
+    async function removeGL(id) {
+      if (!confirm('Remove this guest from the list?')) return;
+      try {
+        await api('/api/guestlist/' + id, { method: 'DELETE' });
+        renderGL();
+      } catch (e) {
+        alert(e.error || 'Failed to remove.');
+      }
+    }
+
+    async function markArrived(id) {
+      try {
+        await api('/api/guestlist/' + id + '/arrive', { method: 'POST' });
+        renderGL();
+      } catch (e) { alert(e.error || 'Failed.'); }
+    }
+
+    async function renderGL() {
+      try {
+        const data = await api('/api/guestlist');
+        document.getElementById('gl-cnt').textContent = data.total;
+        document.getElementById('gl-cin').textContent = data.checkedIn;
+        const tb = document.getElementById('gltbl');
+        tb.innerHTML = data.list.length === 0
+          ? `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:2rem">No guests yet</td></tr>`
+          : data.list.map((g, i) => `<tr>
+            <td>${i + 1}</td><td>${g.name}</td><td>${maskWA(g.wa)}</td><td>${g.party_allowed} pax</td>
+            <td><span class="badge ${g.status === 'checked-in' ? 'used' : 'waiting'}">${g.status === 'checked-in' ? '✓ In' : 'Waiting'}</span></td>
+            <td style="display:flex;gap:0.4rem;flex-wrap:wrap">
+              ${g.status === 'waiting' ? `<button class="btn gbtn sm" onclick="markArrived(${g.id})">✓ Mark Arrived</button>` : ''}
+              ${g.status === 'waiting' ? `<button class="btn dbtn sm" onclick="removeGL(${g.id})">Remove</button>` : '—'}
+            </td>
+          </tr>`).join('');
+      } catch (e) { console.error('[GL]', e); }
+    }
+
+    // ── CSV EXPORT (fetch → blob → real file download) ──
+    async function exportCSV() {
+      if (!authToken) {
+        alert('Session expired. Please re-authenticate as Admin.');
+        needPin('admin', 'admin', document.querySelectorAll('.tab-btn')[2]);
+        return;
+      }
+      try {
+        const resp = await fetch('/api/guests/export?token=' + encodeURIComponent(authToken));
+        if (!resp.ok) {
+          if (resp.status === 401 || resp.status === 403) {
+            authToken = ''; authRole = '';
+            alert('Session expired. Please re-enter Admin PIN.');
+            needPin('admin', 'admin', document.querySelectorAll('.tab-btn')[2]);
+          } else {
+            alert('Export failed. Try again.');
+          }
+          return;
+        }
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const dateStr = new Date().toISOString().split('T')[0];
+        a.href = url;
+        a.download = `checkins-${dateStr}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
+      } catch (e) {
+        console.error('[EXPORT]', e);
+        alert('Export failed. Check your connection.');
+      }
+    }
+
+    async function exportGL() {
+      if (!authToken) return;
+      try {
+        const resp = await fetch('/api/guestlist/export?token=' + encodeURIComponent(authToken));
+        if (!resp.ok) { alert('Export failed.'); return; }
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const dateStr = new Date().toISOString().split('T')[0];
+        a.href = url; a.download = `guestlist-${dateStr}.csv`;
+        document.body.appendChild(a); a.click();
+        setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
+      } catch (e) { alert('Export failed.'); }
+    }
+
+    // ── KICK-OUT MODAL ──
+    let koToken = null;
+    function showKoModal(token) {
+      koToken = token;
+      document.getElementById('ko-tok').textContent = token;
+      document.getElementById('ko-reason').value = '';
+      document.getElementById('ko-err').style.display = 'none';
+      const m = document.getElementById('ko-modal');
+      m.style.display = 'flex';
+      setTimeout(() => document.getElementById('ko-reason').focus(), 100);
+    }
+    function koCancel() {
+      document.getElementById('ko-modal').style.display = 'none';
+      koToken = null;
+    }
+    async function koConfirm() {
+      if (!koToken) return;
+      const reason = document.getElementById('ko-reason').value.trim() || 'Admin Override';
+      const btn = document.getElementById('ko-btn');
+      btn.disabled = true; btn.textContent = 'Processing…';
+      try {
+        await api('/api/guests/' + koToken + '/kick-out', {
+          method: 'POST',
+          body: JSON.stringify({ reason })
+        });
+        document.getElementById('ko-modal').style.display = 'none';
+        koToken = null;
+        renderStats(); renderTbl();
+      } catch (e) {
+        const errEl = document.getElementById('ko-err');
+        errEl.textContent = e.error || 'Failed to kick out. Try again.';
+        errEl.style.display = 'block';
+        if (e.status === 401 || e.status === 403) {
+          authToken = ''; authRole = '';
+          document.getElementById('ko-modal').style.display = 'none';
+          needPin('admin', 'admin', document.querySelectorAll('.tab-btn')[2]);
+        }
+      } finally {
+        btn.disabled = false; btn.textContent = 'Confirm Kick Out';
+      }
+    }
+
+    // ── CLEAR EVENT DATA ──
+    async function clearEventData() {
+      if (!authToken) {
+        alert('Session expired. Please re-authenticate as Admin.');
+        needPin('admin', 'admin', document.querySelectorAll('.tab-btn')[2]);
+        return;
+      }
+      if (!confirm('🚨 WARNING: This will permanently delete ALL check-in records for tonight.\n\nGuest list will be preserved.\n\nThis CANNOT be undone. Are you absolutely sure?')) return;
+      try {
+        const result = await api('/api/guests/clear', { method: 'DELETE' });
+        alert(`✅ Done! ${result.deleted || 0} check-in record(s) cleared. Guest list preserved.`);
+        renderStats();
+        renderTbl();
+      } catch (e) {
+        if (e.status === 401 || e.status === 403) {
+          authToken = ''; authRole = '';
+          alert('Session expired. Please re-enter Admin PIN.');
+          needPin('admin', 'admin', document.querySelectorAll('.tab-btn')[2]);
+        } else {
+          alert(e.error || 'Failed to clear event data.');
+        }
+      }
+    }
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,6 @@
+{"timestamp":"2026-04-13T09:05:51.873Z","level":"info","message":"Tool invocation started","correlationId":"4f39a4fe-07b6-47c1-9e91-5b4ced41daab","tool":"testsprite_check_account_info"}
+{"timestamp":"2026-04-13T09:05:54.737Z","level":"info","message":"Tool invocation completed","correlationId":"4f39a4fe-07b6-47c1-9e91-5b4ced41daab","tool":"testsprite_check_account_info"}
+{"timestamp":"2026-04-13T09:06:11.352Z","level":"info","message":"Tool invocation started","correlationId":"d0f6c125-f06d-4a86-b56a-befaf59d52dc","tool":"testsprite_check_account_info"}
+{"timestamp":"2026-04-13T09:06:16.470Z","level":"info","message":"Tool invocation completed","correlationId":"d0f6c125-f06d-4a86-b56a-befaf59d52dc","tool":"testsprite_check_account_info"}
+{"timestamp":"2026-04-13T09:07:14.552Z","level":"info","message":"Attempting to start server (attempt 1/3)"}
+{"timestamp":"2026-04-13T09:07:14.583Z","level":"info","message":"HTTP server started successfully on port 59317"}
