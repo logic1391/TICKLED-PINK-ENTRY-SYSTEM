@@ -2236,6 +2236,37 @@
       } catch (e) { console.error('[GL]', e); }
     }
 
+    async function adminForceIn(token) {
+      if (!authToken) {
+        alert('Session expired. Please re-authenticate as Admin.');
+        needPin('admin', 'admin', document.querySelectorAll('.tab-btn')[2]);
+        return;
+      }
+      if (!confirm(`Force entry for token ${token}?\nThis bypasses the scanner and marks the guest as entered.`)) return;
+      try {
+        await api('/api/guests/' + token + '/force-entry', { method: 'POST' });
+        renderStats(); renderTbl();
+      } catch (e) {
+        console.error('[FORCE-IN]', e);
+        if (e.status === 401 || e.status === 403) {
+          authToken = ''; authRole = '';
+          alert('Session expired. Please re-enter Admin PIN.');
+          needPin('admin', 'admin', document.querySelectorAll('.tab-btn')[2]);
+        } else {
+          alert(e.error || 'Failed to force entry. Check console for details.');
+        }
+      }
+    }
+
+    function adminKickOut(token) {
+      if (!authToken) {
+        alert('Session expired. Please re-authenticate as Admin.');
+        needPin('admin', 'admin', document.querySelectorAll('.tab-btn')[2]);
+        return;
+      }
+      showKoModal(token);
+    }
+
     // ── CSV EXPORT (fetch → blob → real file download) ──
     async function exportCSV() {
       if (!authToken) {
