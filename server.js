@@ -42,7 +42,7 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     time: new Date().toISOString(),
-    club: process.env.CLUB_NAME || 'VOIDCLUB',
+    club: process.env.CLUB_NAME || 'TICKLED PINK',
     devMode: process.env.DEV_MODE === 'true'
   });
 });
@@ -58,19 +58,25 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-// ── Initialize DB on startup, then start server ──
-const db = require('./db/database');
+// ── CRITICAL: Export app for Vercel serverless ──
+// Vercel imports this file as a module — it needs module.exports = app
+// app.listen() must NOT be called at module load time on Vercel
+module.exports = app;
 
-(async () => {
-  await db.getDb(); // triggers schema creation (async with sql.js)
-
-  app.listen(PORT, () => {
-    console.log(`\n╔════════════════════════════════════════╗`);
-    console.log(`║   🎵 ${process.env.CLUB_NAME || 'VOIDCLUB'} — BACKEND RUNNING        ║`);
-    console.log(`╠════════════════════════════════════════╣`);
-    console.log(`║   URL:  http://localhost:${PORT}          ║`);
-    console.log(`║   Mode: ${process.env.DEV_MODE === 'true' ? 'DEVELOPMENT' : 'PRODUCTION '}              ║`);
-    console.log(`║   DB:   PostgreSQL (Supabase)          ║`);
-    console.log(`╚════════════════════════════════════════╝\n`);
-  });
-})();
+// ── Local dev only: init DB then start listening ──
+// require.main === module is true only when run via: node server.js
+if (require.main === module) {
+  const db = require('./db/database');
+  (async () => {
+    await db.getDb();
+    app.listen(PORT, () => {
+      console.log(`\n╔════════════════════════════════════════╗`);
+      console.log(`║   🎵 ${process.env.CLUB_NAME || 'TICKLED PINK'} — BACKEND RUNNING   ║`);
+      console.log(`╠════════════════════════════════════════╣`);
+      console.log(`║   URL:  http://localhost:${PORT}          ║`);
+      console.log(`║   Mode: ${process.env.DEV_MODE === 'true' ? 'DEVELOPMENT' : 'PRODUCTION '}              ║`);
+      console.log(`║   DB:   PostgreSQL (Supabase)          ║`);
+      console.log(`╚════════════════════════════════════════╝\n`);
+    });
+  })();
+}
