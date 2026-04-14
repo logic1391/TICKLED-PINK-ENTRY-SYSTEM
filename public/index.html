@@ -440,6 +440,91 @@
       color: var(--accent2)
     }
 
+    /* ── ENTRY TYPE SELECTION ── */
+    .etype-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .ecard {
+      background: var(--glass);
+      backdrop-filter: blur(24px) saturate(160%);
+      -webkit-backdrop-filter: blur(24px) saturate(160%);
+      border: 1px solid var(--glass-stroke);
+      border-radius: 18px;
+      padding: 1.2rem 0.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .ecard:hover {
+      background: var(--glass-hover);
+      border-color: rgba(255,102,178,0.3);
+      transform: translateY(-2px);
+      box-shadow: 0 12px 32px rgba(0,0,0,0.5);
+    }
+
+    .ecard.sel {
+      background: rgba(255,102,178,0.1);
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent), 0 8px 24px rgba(255,102,178,0.2);
+    }
+
+    .ecard .eico {
+      font-size: 1.8rem;
+      margin-bottom: 0.2rem;
+      line-height: 1;
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .male { color: #87CEEB !important; text-shadow: 0 0 10px rgba(135,206,235,0.4); }
+    .female { color: #FFC0CB !important; text-shadow: 0 0 10px rgba(255,192,203,0.4); }
+
+    .ecard:hover .eico {
+      transform: scale(1.2);
+    }
+
+    .ecard .elbl {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 0.95rem;
+      letter-spacing: 0.05em;
+      color: var(--text);
+    }
+
+    .ecard .esub {
+      font-size: 0.65rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+    }
+
+    #checkin-details {
+      display: none;
+      animation: detailsIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    @keyframes detailsIn {
+      from { opacity: 0; transform: translateY(15px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .gsize-wrap {
+      margin-top: -0.5rem;
+      margin-bottom: 1.5rem;
+      display: none;
+      animation: detailsIn 0.4s ease both;
+    }
+
     .pcard {
       background: linear-gradient(145deg, rgba(30,20,40,0.6), rgba(20,15,30,0.7));
       backdrop-filter: blur(32px) saturate(200%);
@@ -1211,27 +1296,47 @@
 
       <!-- Step 1 -->
       <div id="s1">
-        <div class="card">
-          <div class="alert err" id="s1-err"></div>
-          <div class="field"><label>Full Name</label><input id="fn" type="text" placeholder="Your name"
-              autocomplete="name" onkeydown="if(event.key==='Enter') s1next()"></div>
-          <div class="field"><label>WhatsApp Number</label><input id="fw" type="tel" maxlength="10"
-              placeholder="10-digit" oninput="this.value=this.value.replace(/\D/g,'')"
-              onkeydown="if(event.key==='Enter') s1next()"></div>
-          <div class="field"><label>Aadhaar Number</label><input id="fa" type="text" maxlength="14"
-              placeholder="XXXX XXXX XXXX" oninput="fmtAadhar(this)" onkeydown="if(event.key==='Enter') s1next()"></div>
-          <div class="field">
-            <label>Party Size</label>
-            <select id="fp" onchange="buildAgeFields()" onkeydown="if(event.key==='Enter') s1next()">
-              <option value="1">1 — just me</option>
-              <option value="2">2 people</option>
-              <option value="3">3 people</option>
-              <option value="4">4 people</option>
-              <option value="5">5 people</option>
-            </select>
+        <label style="margin-bottom:0.75rem;display:block">1. Select Entry Type</label>
+        <div class="etype-grid">
+          <div class="ecard" id="et-single" onclick="setEntryType('single')">
+            <div class="eico"><span class="male">♂</span> <span style="font-size:1.2rem;color:var(--muted)">/</span> <span class="female">♀</span></div>
+            <div class="elbl">Single</div>
+            <div class="esub">1 Person</div>
           </div>
-          <div class="field" id="age-wrap"></div>
-          <button class="btn" id="s1-btn" onclick="s1next()">Continue →</button>
+          <div class="ecard" id="et-couple" onclick="setEntryType('couple')">
+            <div class="eico"><span class="female">♀</span><span class="male">♂</span></div>
+            <div class="elbl">Couple</div>
+            <div class="esub">2 People</div>
+          </div>
+          <div class="ecard" id="et-group" onclick="setEntryType('group')" style="display:flex;flex-direction:column;justify-content:center;align-items:center">
+            <div class="elbl">Group</div>
+            <div class="esub">3+ People</div>
+          </div>
+        </div>
+
+        <div id="gsize-wrap" class="gsize-wrap">
+          <div class="card">
+            <label>How many people in your group?</label>
+            <div class="row">
+              <input id="gsize-val" type="number" min="3" placeholder="e.g. 4" oninput="updateGSize(this.value)" style="font-size:1.1rem;text-align:center">
+            </div>
+          </div>
+        </div>
+
+        <div id="checkin-details">
+          <div class="card">
+            <div class="alert err" id="s1-err"></div>
+            <div class="field"><label>Full Name</label><input id="fn" type="text" placeholder="Your name"
+                autocomplete="name" onkeydown="if(event.key==='Enter') s1next()"></div>
+            <div class="field"><label>WhatsApp Number</label><input id="fw" type="tel" maxlength="10"
+                placeholder="10-digit" oninput="this.value=this.value.replace(/\D/g,'')"
+                onkeydown="if(event.key==='Enter') s1next()"></div>
+            <div class="field"><label>Aadhaar Number</label><input id="fa" type="text" maxlength="14"
+                placeholder="XXXX XXXX XXXX" oninput="fmtAadhar(this)" onkeydown="if(event.key==='Enter') s1next()"></div>
+            <input id="fp" type="hidden" value="1">
+            <div class="field" id="age-wrap"></div>
+            <button class="btn" id="s1-btn" onclick="s1next()">Continue →</button>
+          </div>
         </div>
       </div>
 
@@ -1638,6 +1743,49 @@
       lbl.textContent = open ? 'Doors open · ' + CFG.doorsOpen + '–' + CFG.doorsClose : 'Doors closed · Opens ' + CFG.doorsOpen;
     }
 
+    // ── ENTRY TYPE SELECTION ──
+    function setEntryType(type) {
+      document.querySelectorAll('.ecard').forEach(el => el.classList.remove('sel'));
+      document.getElementById('et-' + type).classList.add('sel');
+
+      const gWrap = document.getElementById('gsize-wrap');
+      const det = document.getElementById('checkin-details');
+      const fp = document.getElementById('fp');
+
+      if (type === 'single') {
+        gWrap.style.display = 'none';
+        fp.value = '1';
+        buildAgeFields();
+        det.style.display = 'block';
+      } else if (type === 'couple') {
+        gWrap.style.display = 'none';
+        fp.value = '2';
+        buildAgeFields();
+        det.style.display = 'block';
+      } else if (type === 'group') {
+        gWrap.style.display = 'block';
+        det.style.display = 'none'; // hide until size is entered
+        document.getElementById('gsize-val').value = '';
+        document.getElementById('gsize-val').focus();
+      }
+    }
+
+    function updateGSize(val) {
+      const v = parseInt(val);
+      const det = document.getElementById('checkin-details');
+      const fp = document.getElementById('fp');
+
+      if (!v || v < 1) {
+        det.style.display = 'none';
+        return;
+      }
+
+      // Sync with hidden input
+      fp.value = v.toString();
+      buildAgeFields();
+      det.style.display = 'block';
+    }
+
     // ── NAV ──
     function gotoPage(id, btn) {
       document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -1690,16 +1838,28 @@
     function buildAgeFields() {
       const sz = parseInt(document.getElementById('fp').value) || 1;
       const w = document.getElementById('age-wrap');
-      const L = ['You', ...Array.from({ length: sz - 1 }, (_, i) => 'Guest ' + (i + 1))];
       if (sz === 1) {
         w.innerHTML = '<label>Your Age</label><input id="age0" type="number" min="18" max="99" step="1" placeholder="Must be 18+" oninput="if(this.value>99)this.value=99;" onkeydown="if(event.key===\'Enter\') s1next()">';
       } else {
-        w.innerHTML = `<label>Ages — all ${sz} people <span style="color:var(--accent)">· ALL must be 18+</span></label>
-        <div style="font-size:0.75rem;color:var(--muted);margin-bottom:0.5rem">One box per person · e.g. <span style="color:var(--accent2)">${Array.from({ length: sz }, (_, i) => 18 + i).join(', ')}</span></div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:0.5rem">
-        ${L.map((l, i) => `<div><div style="font-size:0.68rem;color:var(--muted);margin-bottom:3px;text-transform:uppercase">${l}</div>
-        <input id="age${i}" type="number" min="18" max="99" step="1" oninput="if(this.value>99)this.value=99;" onkeydown="if(event.key==='Enter') s1next()" placeholder="Age" style="padding:0.6rem 0.75rem;font-size:0.9rem"></div>`).join('')}
-        </div><div style="font-size:0.75rem;color:var(--muted);margin-top:0.5rem">⚠️ Any person under 18 = entire group denied</div>`;
+        let html = `<label>Guest Details <span style="color:var(--accent)">· ALL must be 18+</span></label>
+        <div style="font-size:0.75rem;color:var(--muted);margin-bottom:0.8rem">Provide names for your group members.</div>
+        <div style="display:flex;flex-direction:column;gap:0.75rem">`;
+
+        for (let i = 0; i < sz; i++) {
+          const label = i === 0 ? 'You' : 'Guest ' + (i + 1);
+          html += `<div style="display:grid;grid-template-columns:1fr 80px;gap:0.5rem;align-items:end">
+            <div>
+              <div style="font-size:0.68rem;color:var(--muted);margin-bottom:3px;text-transform:uppercase">${label} Name</div>
+              ${i === 0 ? `<input type="text" value="Primary Member" disabled style="opacity:0.6">` : `<input id="gname${i}" type="text" placeholder="Full Name" onkeydown="if(event.key==='Enter') s1next()">`}
+            </div>
+            <div>
+              <div style="font-size:0.68rem;color:var(--muted);margin-bottom:3px;text-transform:uppercase">Age</div>
+              <input id="age${i}" type="number" min="18" max="99" step="1" placeholder="18+" oninput="if(this.value>99)this.value=99;" onkeydown="if(event.key==='Enter') s1next()">
+            </div>
+          </div>`;
+        }
+        html += `</div><div style="font-size:0.75rem;color:var(--muted);margin-top:0.8rem">⚠️ Any person under 18 = entire group denied</div>`;
+        w.innerHTML = html;
       }
     }
 
@@ -1718,19 +1878,23 @@
       if (wa.length !== 10) return E('Enter a valid 10-digit WhatsApp number.');
       if (!validAadhar(aaRaw)) return E('Invalid Aadhaar — exactly 12 digits required.');
 
-      // Age validation
-      const ages = [];
+      // Age & Name validation
+      const guestDetails = [];
       for (let i = 0; i < sz; i++) {
-        const raw = document.getElementById('age' + i)?.value;
-        const v = Number(raw);
-        if (!raw || !Number.isInteger(v) || v < 1) return E('Enter a whole number age for: ' + (i === 0 ? 'yourself' : 'Guest ' + i) + '.');
-        if (v < 18) return E((i === 0 ? 'You' : 'Guest ' + i) + ' must be 18+. Entire group denied.');
-        if (v > 99) return E('Age cannot exceed 99 for: ' + (i === 0 ? 'yourself' : 'Guest ' + i) + '.');
-        ages.push(v);
+        const pName = i === 0 ? name : (document.getElementById('gname' + i)?.value || '').trim();
+        const pAgeRaw = document.getElementById('age' + i)?.value;
+        const pAge = Number(pAgeRaw);
+
+        if (i > 0 && !pName) return E('Enter full name for Guest ' + (i + 1) + '.');
+        if (!pAgeRaw || !Number.isInteger(pAge) || pAge < 1) return E('Enter a valid age for ' + (i === 0 ? 'yourself' : 'Guest ' + (i + 1)) + '.');
+        if (pAge < 18) return E((i === 0 ? 'You' : 'Guest ' + (i + 1)) + ' must be 18+. Entire group denied.');
+        if (pAge > 99) return E('Age cannot exceed 99 for: ' + (i === 0 ? 'yourself' : 'Guest ' + (i + 1)) + '.');
+        
+        guestDetails.push({ name: pName, age: pAge });
       }
 
       // Store form data for later
-      pendingCheckin = { name, wa, aadhar: aaRaw, party: sz, ages };
+      pendingCheckin = { name, wa, aadhar: aaRaw, party: sz, ages: guestDetails };
 
       // Lock button briefly
       s1Busy = true;
@@ -1862,8 +2026,9 @@
         rzp.open();
 
       } catch (e) {
-        console.error('[PAYMENT]', e);
-        alert('Failed to initiate payment. Please try again.');
+        console.error('[PAYMENT ERROR]', e);
+        const msg = e.error || e.message || 'Check your internet connection or try again.';
+        alert('Failed to initiate payment: ' + msg);
       }
     }
 
@@ -1897,7 +2062,16 @@
         // Render pass
         document.getElementById('p-name').textContent = g.name;
         document.getElementById('p-type').textContent = g.type_name;
-        document.getElementById('p-party').textContent = g.party + (g.party > 1 ? ' people' : ' person');
+        
+        // Render Party Names (First names)
+        let partyHtml = '';
+        if (Array.isArray(g.ages)) {
+          const names = g.ages.map(p => (p.name || 'Guest').split(' ')[0]);
+          partyHtml = names.join(', ');
+        } else {
+          partyHtml = g.party + (g.party > 1 ? ' people' : ' person');
+        }
+        document.getElementById('p-party').textContent = partyHtml;
         document.getElementById('p-paid').textContent = '₹' + g.price_total.toLocaleString('en-IN');
         document.getElementById('p-valid').textContent = CFG.doorsOpen + ' – ' + CFG.doorsClose + ' · Tonight only';
         document.getElementById('p-tok').innerHTML = g.token + '<small>TOKEN</small>';
@@ -1990,8 +2164,15 @@
 
     function resetCI() {
       selTkt = null; glOK = false; pendingCheckin = null;
-      ['fn', 'fw', 'fa'].forEach(id => document.getElementById(id).value = '');
-      document.getElementById('fp').value = '1'; buildAgeFields();
+      ['fn', 'fw', 'fa', 'gsize-val'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+      });
+      document.getElementById('fp').value = '1';
+      document.querySelectorAll('.ecard').forEach(el => el.classList.remove('sel'));
+      document.getElementById('checkin-details').style.display = 'none';
+      document.getElementById('gsize-wrap').style.display = 'none';
+      buildAgeFields();
       document.getElementById('s1-err').classList.remove('show');
       gotoStep(1); checkWindow();
     }
@@ -2168,7 +2349,7 @@
             <td><span style="font-family:'Bebas Neue',sans-serif;letter-spacing:0.1em">${g.token}</span></td>
             <td>${g.name}</td><td>${maskWA(g.wa)}</td><td>${maskAA(g.aadhar)}</td>
             <td><span class="badge ${g.type}">${g.type_name}</span></td>
-            <td>${g.party} ${g.party > 1 ? 'ppl' : 'person'}</td>
+            <td>${g.party > 1 ? '1 + ' + (g.party - 1) + ' pax' : '1 person'}</td>
             <td>₹${g.price_total.toLocaleString('en-IN')}${g.party > 1 ? `<br><span style="font-size:0.7rem;color:var(--muted)">${g.party}×₹${g.price_per_person}</span>` : ''}</td>
             <td>${fmtT(g.created_at)}</td>
             <td><span class="badge ${g.kicked_out ? 'waiting' : (g.scanned ? 'used' : 'waiting')}">${g.kicked_out ? 'Kicked Out' : (g.scanned ? '✓ In' : 'Waiting')}</span></td>

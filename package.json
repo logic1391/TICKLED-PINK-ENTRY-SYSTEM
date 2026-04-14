@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch-path=server.js --watch-path=routes --watch-path=services --watch-path=db --watch-path=middleware server.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

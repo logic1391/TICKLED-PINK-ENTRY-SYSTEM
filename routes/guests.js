@@ -23,10 +23,13 @@ router.post('/checkin', async (req, res) => {
     const maxParty = parseInt(process.env.MAX_PARTY_SIZE) || 5;
     if (sz < 1 || sz > maxParty) return res.status(400).json({ error: `Party size must be 1–${maxParty}.` });
 
-    const ageList = Array.isArray(ages) ? ages : [];
-    if (ageList.length !== sz) return res.status(400).json({ error: 'Age list does not match party size.' });
+    const guestList = Array.isArray(ages) ? ages : [];
+    if (guestList.length !== sz) return res.status(400).json({ error: 'Guest details do not match party size.' });
     for (let i = 0; i < sz; i++) {
-      const v = parseInt(ageList[i]);
+      const { name: pName, age } = guestList[i];
+      if (i > 0 && (!pName || !pName.trim())) return res.status(400).json({ error: `Enter full name for person ${i + 1}.` });
+      
+      const v = parseInt(age);
       if (!Number.isInteger(v) || v < 1) return res.status(400).json({ error: `Enter a valid age for person ${i + 1}.` });
       if (v < 18) return res.status(400).json({ error: `Person ${i + 1} must be 18+. Entire group denied.` });
       if (v > 99) return res.status(400).json({ error: `Age cannot exceed 99 for person ${i + 1}.` });
@@ -59,7 +62,7 @@ router.post('/checkin', async (req, res) => {
 
     const guest = await db.createGuest({
       name: name.trim(), wa, aadhar, type, typeName, party: sz,
-      ages: ageList.map(Number),
+      ages: guestList,
       pricePerPerson: parseInt(pricePerPerson) || 0,
       priceTotal: parseInt(priceTotal) || 0,
       paymentId: paymentId || null,
