@@ -97,6 +97,20 @@ router.get('/export', async (req, res) => {
 });
 
 /**
+ * DELETE /api/guestlist/clear
+ * Admin — clear entire guest list
+ */
+router.delete('/clear', verifyToken, requireRole('admin'), async (req, res) => {
+  try {
+    const deleted = await db.clearGuestList();
+    await db.logAction('guestlist_clear_all', `Cleared ${deleted} entries`, req.user.role, req.ip);
+    res.json({ success: true, deleted });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to clear guest list' });
+  }
+});
+
+/**
  * DELETE /api/guestlist/:id
  * Admin — remove from guest list
  * NOTE: Wildcard — must be AFTER all named routes

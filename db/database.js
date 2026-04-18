@@ -308,6 +308,11 @@ async function getGuestListStats() {
   };
 }
 
+async function clearGuestList() {
+  const res = await pool.query('DELETE FROM guest_list');
+  return res.rowCount;
+}
+
 // ── Audit ──
 async function logAction(action, details, role, ip) {
   await pool.query('INSERT INTO audit_log (action, details, role, ip) VALUES ($1, $2, $3, $4)',
@@ -335,5 +340,6 @@ module.exports = {
   markGuestListArrived,
   verifyGuestList,
   getGuestListStats,
+  clearGuestList,
   logAction
 };

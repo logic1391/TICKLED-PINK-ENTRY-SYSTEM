@@ -1502,6 +1502,7 @@
     <div class="admin-actions">
       <button class="btn sm out" onclick="exportCSV()">Export CSV</button>
       <button class="btn sm ybtn" onclick="clearEventData()">🗑 Clear Event Data</button>
+      <button class="btn sm dbtn" style="border-color:var(--red);color:var(--red)" onclick="clearGLData()">🗑 Clear Guest List</button>
     </div>
     <div class="capwrap">
       <div class="caplbl"><span>Venue Capacity</span><span id="cap-lbl">0 / 300</span></div>
@@ -1573,7 +1574,10 @@
         <h1>GUEST LIST</h1>
         <p>Pre-approved · <span id="gl-cnt">0</span> added · <span id="gl-cin">0</span> checked in</p>
       </div>
-      <button class="btn sm out" onclick="exportGL()">Export CSV</button>
+      <div style="display:flex;gap:0.5rem;align-items:center">
+        <button class="btn sm out" onclick="exportGL()">Export CSV</button>
+        <button class="btn sm dbtn" style="padding:0.6rem 0.8rem;font-size:0.75rem" onclick="clearGLData()">🗑 Clear List</button>
+      </div>
     </div>
     <div class="card">
       <p class="tm" style="margin-bottom:0.75rem;font-size:0.82rem">Both name AND WhatsApp must match exactly at
@@ -1821,14 +1825,21 @@
           method: 'POST',
           body: JSON.stringify({ pin: pinBuf })
         });
+        
+        // Fix: Ensure the PIN used matches the requested role
+        // This ensures Admin PIN (1234) doesn't access Bouncer section and vice-versa if desired.
+        const { page, btn, role: reqRole } = pendPin;
+        if (role !== reqRole) {
+          throw { error: 'Incorrect PIN for this section.' };
+        }
+
         authToken = token;
         authRole = role;
         document.getElementById('pin-ov').style.display = 'none';
-        const { page, btn } = pendPin;
         gotoPage(page, btn);
       } catch (e) {
         const err = document.getElementById('pin-err');
-        err.textContent = 'Incorrect PIN. Try again.';
+        err.textContent = e.error || 'Incorrect PIN. Try again.';
         err.style.display = 'block';
         pinBuf = ''; updDots();
       }
@@ -2590,6 +2601,23 @@
         } else {
           alert(e.error || 'Failed to clear event data.');
         }
+      }
+    }
+
+    async function clearGLData() {
+      if (!authToken || authRole !== 'admin') {
+        alert('Admin access required.');
+        needPin('admin', 'guestlist', document.querySelectorAll('.tab-btn')[3]);
+        return;
+      }
+      if (!confirm('🚨 WARNING: This will permanently delete the ENTIRE Guest List.\n\nThis CANNOT be undone. Are you absolutely sure?')) return;
+      try {
+        const result = await api('/api/guestlist/clear', { method: 'DELETE' });
+        alert(`✅ Done! ${result.deleted || 0} guest list entries cleared.`);
+        renderGL();
+        renderStats();
+      } catch (e) {
+        alert(e.error || 'Failed to clear guest list.');
       }
     }
   </script>
