@@ -20,8 +20,8 @@ router.get('/', verifyToken, requireRole('admin'), async (req, res) => {
  * Admin — add to guest list
  */
 router.post('/', verifyToken, requireRole('admin'), async (req, res) => {
-  const { name, wa, partyAllowed } = req.body;
-  const maxParty = parseInt(process.env.MAX_PARTY_SIZE) || 5;
+  const { name, wa, partyAllowed, otherGuests } = req.body;
+  const maxParty = parseInt(process.env.MAX_PARTY_SIZE) || 30;
 
   if (!name || !name.trim()) return res.status(400).json({ error: 'Name is required.' });
   if (!wa || wa.length !== 10) return res.status(400).json({ error: 'Valid 10-digit WhatsApp number required.' });
@@ -35,7 +35,12 @@ router.post('/', verifyToken, requireRole('admin'), async (req, res) => {
   if (existing) return res.status(400).json({ error: 'This number is already on the list.' });
 
   try {
-    const entry = await db.addToGuestList({ name: name.trim(), wa, partyAllowed: ps });
+    const entry = await db.addToGuestList({ 
+      name: name.trim(), 
+      wa, 
+      partyAllowed: ps, 
+      otherGuests: Array.isArray(otherGuests) ? otherGuests : [] 
+    });
     await db.logAction('guestlist_add', `${name} (${wa})`, req.user.role, req.ip);
     res.json({ success: true, entry });
   } catch (e) {
@@ -109,7 +114,7 @@ router.delete('/:id', verifyToken, requireRole('admin'), async (req, res) => {
  * NOTE: Wildcard — must be AFTER all named routes
  */
 router.post('/:id/arrive', verifyToken, requireRole('admin'), async (req, res) => {
-  const entry = await db.markGuestListArrived(parseInt(req.params.id));
+  const entry = await db.markGuestListArrived(parseInt(req.params.id), true);
   if (!entry) return res.status(404).json({ error: 'Not found' });
   await db.logAction('guestlist_arrive', `${entry.name}`, req.user.role, req.ip);
   res.json({ success: true, entry });

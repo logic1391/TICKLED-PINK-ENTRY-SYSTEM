@@ -1583,9 +1583,13 @@
         <div><label>Full Name</label><input id="gl-nm" type="text" placeholder="Guest name"></div>
         <div><label>WhatsApp</label><input id="gl-wa" type="tel" maxlength="10" placeholder="10-digit"
             oninput="this.value=this.value.replace(/\D/g,'')"></div>
-        <div><label>Party</label><input id="gl-ps" type="number" min="1" max="5" step="1" value="1" placeholder="1">
+        <div><label>Party</label><input id="gl-ps" type="number" min="1" max="30" step="1" value="1" placeholder="1" oninput="watchGLParty()">
         </div>
         <button class="btn sm" style="align-self:end" onclick="addGL()">Add</button>
+      </div>
+      <div id="gl-extra-names" style="display:none;margin-top:1rem;padding-top:1rem;border-top:1px dashed var(--border)">
+        <label style="color:var(--accent);margin-bottom:0.75rem">Additional Guest Names</label>
+        <div id="gl-names-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem"></div>
       </div>
       <div class="alert err" id="gl-add-err"></div>
     </div>
@@ -2359,21 +2363,47 @@
     }
 
     // ── GUEST LIST (API) ──
+    function watchGLParty() {
+      const ps = parseInt(document.getElementById('gl-ps').value) || 1;
+      const wrap = document.getElementById('gl-extra-names');
+      const grid = document.getElementById('gl-names-grid');
+      
+      if (ps <= 1) {
+        wrap.style.display = 'none';
+        grid.innerHTML = '';
+        return;
+      }
+      
+      wrap.style.display = 'block';
+      let html = '';
+      for (let i = 1; i < ps; i++) {
+        html += `<input type="text" class="gl-extra-name" placeholder="Guest ${i+1} Name" style="font-size:0.85rem;padding:0.6rem 0.8rem">`;
+      }
+      grid.innerHTML = html;
+    }
+
     async function addGL() {
       const name = document.getElementById('gl-nm').value.trim();
       const wa = document.getElementById('gl-wa').value.trim();
       const ps = parseInt(document.getElementById('gl-ps').value) || 1;
+      const extraInps = document.querySelectorAll('.gl-extra-name');
+      const otherGuests = [];
+      extraInps.forEach(inp => { if (inp.value.trim()) otherGuests.push(inp.value.trim()); });
+
       const err = document.getElementById('gl-add-err');
       err.style.display = 'none';
+
+      if (!name || !wa) { err.textContent = 'Name and WhatsApp required.'; err.style.display = 'block'; return; }
 
       try {
         await api('/api/guestlist', {
           method: 'POST',
-          body: JSON.stringify({ name, wa, partyAllowed: ps })
+          body: JSON.stringify({ name, wa, partyAllowed: ps, otherGuests })
         });
         document.getElementById('gl-nm').value = '';
         document.getElementById('gl-wa').value = '';
         document.getElementById('gl-ps').value = '1';
+        watchGLParty();
         renderGL();
       } catch (e) {
         err.textContent = e.error || 'Failed to add.';

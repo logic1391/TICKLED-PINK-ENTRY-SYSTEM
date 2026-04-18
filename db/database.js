@@ -43,7 +43,7 @@ async function initSchema() {
       token            VARCHAR(6)  UNIQUE NOT NULL,
       name             TEXT        NOT NULL,
       wa               VARCHAR(10) NOT NULL,
-      aadhar           VARCHAR(12) NOT NULL,
+      aadhar           VARCHAR(12),
       type             VARCHAR(20) NOT NULL,
       type_name        VARCHAR(20) NOT NULL,
       party            INTEGER     NOT NULL DEFAULT 1,
@@ -62,6 +62,7 @@ async function initSchema() {
   `);
 
   await pool.query('ALTER TABLE guests ADD COLUMN IF NOT EXISTS kicked_out BOOLEAN NOT NULL DEFAULT false;');
+  await pool.query('ALTER TABLE guests ALTER COLUMN aadhar DROP NOT NULL;');
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS guest_list (
@@ -69,11 +70,14 @@ async function initSchema() {
       name          TEXT        NOT NULL,
       wa            VARCHAR(10) UNIQUE NOT NULL,
       party_allowed INTEGER     NOT NULL DEFAULT 1,
+      other_guests  JSONB       NOT NULL DEFAULT '[]',
       status        VARCHAR(20) NOT NULL DEFAULT 'waiting',
       created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
+
+  await pool.query('ALTER TABLE guest_list ADD COLUMN IF NOT EXISTS other_guests JSONB NOT NULL DEFAULT \'[]\';');
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS audit_log (
@@ -186,15 +190,16 @@ async function getAllGuests(search) {
 async function getStats() {
   const today = getLocalDateStr();
   
-  const [totalRes, scannedRes, vipRes, genRes, glRes, bookRes, revRes, waitRes] = await Promise.all([
-    pool.query('SELECT COALESCE(SUM(party), 0) as s FROM guests WHERE event_date = $1', [today]),
-    pool.query('SELECT COALESCE(SUM(party), 0) as s FROM guests WHERE event_date = $1 AND scanned = true AND kicked_out = false', [today]),
+  const [totalRes, scannedRes, vipRes, genRes, glInRes, glWaitRes, bookRes, revRes, waitRes] = await Promise.all([
+    pool.query("SELECT COALESCE(SUM(party), 0) as s FROM guests WHERE event_date = $1 AND type != 'guestlist'", [today]),
+    pool.query("SELECT COALESCE(SUM(party), 0) as s FROM guests WHERE event_date = $1 AND scanned = true AND kicked_out = false AND type != 'guestlist'", [today]),
     pool.query("SELECT COALESCE(SUM(party), 0) as s FROM guests WHERE event_date = $1 AND type = 'vip'", [today]),
     pool.query("SELECT COALESCE(SUM(party), 0) as s FROM guests WHERE event_date = $1 AND type = 'general'", [today]),
     pool.query("SELECT COALESCE(SUM(party), 0) as s FROM guests WHERE event_date = $1 AND type = 'guestlist'", [today]),
+    pool.query("SELECT COALESCE(SUM(party_allowed), 0) as s FROM guest_list WHERE status = 'waiting'", []),
     pool.query('SELECT COUNT(*) as s FROM guests WHERE event_date = $1', [today]),
     pool.query('SELECT COALESCE(SUM(price_total), 0) as s FROM guests WHERE event_date = $1', [today]),
-    pool.query('SELECT COALESCE(SUM(party), 0) as s FROM guests WHERE event_date = $1 AND scanned = false AND kicked_out = false', [today])
+    pool.query("SELECT COALESCE(SUM(party), 0) as s FROM guests WHERE event_date = $1 AND scanned = false AND kicked_out = false AND type != 'guestlist'", [today])
   ]);
 
   return { 
@@ -202,7 +207,7 @@ async function getStats() {
     scannedIn: parseInt(scannedRes.rows[0].s), 
     vip: parseInt(vipRes.rows[0].s), 
     general: parseInt(genRes.rows[0].s), 
-    guestlist: parseInt(glRes.rows[0].s), 
+    guestlist: parseInt(glInRes.rows[0].s) + parseInt(glWaitRes.rows[0].s), 
     bookings: parseInt(bookRes.rows[0].s), 
     revenue: parseInt(revRes.rows[0].s), 
     waiting: parseInt(waitRes.rows[0].s) 
@@ -237,8 +242,9 @@ async function getGuestList() {
   return res.rows;
 }
 
-async function addToGuestList({ name, wa, partyAllowed }) {
-  await pool.query('INSERT INTO guest_list (name, wa, party_allowed) VALUES ($1, $2, $3)', [name, wa, partyAllowed]);
+async function addToGuestList({ name, wa, partyAllowed, otherGuests }) {
+  await pool.query('INSERT INTO guest_list (name, wa, party_allowed, other_guests) VALUES ($1, $2, $3, $4)', 
+    [name, wa, partyAllowed, JSON.stringify(otherGuests || [])]);
   const res = await pool.query('SELECT * FROM guest_list WHERE wa = $1', [wa]);
   return res.rows[0];
 }
@@ -252,8 +258,34 @@ async function removeFromGuestList(id) {
   return { success: true };
 }
 
-async function markGuestListArrived(id) {
+async function markGuestListArrived(id, autoCreateGuest = false) {
+  const gl = await pool.query('SELECT * FROM guest_list WHERE id = $1', [id]);
+  const entry = gl.rows[0];
+  if (!entry) return null;
+
   await pool.query("UPDATE guest_list SET status = 'checked-in', updated_at = NOW() WHERE id = $1", [id]);
+
+  if (autoCreateGuest) {
+    const today = getLocalDateStr();
+    const existing = await pool.query('SELECT id FROM guests WHERE wa = $1 AND event_date = $2', [entry.wa, today]);
+    
+    if (existing.rowCount === 0) {
+      const token = await generateToken();
+      // Format guest names for the 'ages' JSONB field (matches check-in format)
+      const partyDetails = [{ name: entry.name, age: '21' }]; // Default age if not known
+      if (Array.isArray(entry.other_guests)) {
+        entry.other_guests.forEach(n => partyDetails.push({ name: n, age: '21' }));
+      }
+
+      await pool.query(`
+        INSERT INTO guests (token, name, wa, aadhar, type, type_name, party, ages, price_per_person, price_total, scanned, scan_time, event_date)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, NOW(), $11)
+      `, [token, entry.name, entry.wa, '', 'guestlist', 'Guest List', entry.party_allowed, JSON.stringify(partyDetails), 0, 0, today]);
+    } else {
+      await pool.query('UPDATE guests SET scanned = true, scan_time = NOW() WHERE wa = $1 AND event_date = $2', [entry.wa, today]);
+    }
+  }
+
   const res = await pool.query('SELECT * FROM guest_list WHERE id = $1', [id]);
   return res.rows[0];
 }
@@ -264,11 +296,16 @@ async function verifyGuestList(wa, name) {
 }
 
 async function getGuestListStats() {
-  const [totalRes, checkRes] = await Promise.all([
+  const [totalRes, checkRes, partyRes] = await Promise.all([
     pool.query('SELECT COUNT(*) FROM guest_list'),
-    pool.query("SELECT COUNT(*) FROM guest_list WHERE status = 'checked-in'")
+    pool.query("SELECT COUNT(*) FROM guest_list WHERE status = 'checked-in'"),
+    pool.query('SELECT COALESCE(SUM(party_allowed), 0) as s FROM guest_list')
   ]);
-  return { total: parseInt(totalRes.rows[0].count), checkedIn: parseInt(checkRes.rows[0].count) };
+  return { 
+    total: parseInt(totalRes.rows[0].count), 
+    checkedIn: parseInt(checkRes.rows[0].count),
+    totalPeople: parseInt(partyRes.rows[0].s)
+  };
 }
 
 // ── Audit ──
